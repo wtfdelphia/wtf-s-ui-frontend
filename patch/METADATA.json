@@ -1,0 +1,15 @@
+{
+  "repo_kind": "frontend",
+  "base": "a4b8816",
+  "base_full": "a4b88165023003acd8f25c90d4cb395b7f996b50",
+  "up_ref": "up/main",
+  "up_sha": "31049d1c437b13d6a3b29b2c7243121107301b66",
+  "cloud_ref": "cloud/main",
+  "cloud_sha": "f859e16953cd733293618f626cc19b8466e00fd3",
+  "patch3_target": "f859e16953cd733293618f626cc19b8466e00fd3",
+  "dev_custom_sha": "edeac953f730c9423b2790ea04aeaea4014a9225",
+  "consumed_by_backend_submodule": true,
+  "generated_at": "2026-09-16T16:10:16.740820+08:00",
+  "verified": true,
+  "notes": "01 reproduces up/main tree, 02 reproduces cloud/main tree, 03 reproduces dev-custom tree (all verified via git apply --index + git diff --exit-code). npm ci && npm run build passes on dev-custom. 2026-09-16 refresh: dev-custom drops upstream promotional links (Drawer/Login) and their locale keys."
+}

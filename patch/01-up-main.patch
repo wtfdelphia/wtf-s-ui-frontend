@@ -1,0 +1,2395 @@
+diff --git a/src/layouts/default/AppBar.vue b/src/layouts/default/AppBar.vue
+index 0b95674..7df11e5 100644
+--- a/src/layouts/default/AppBar.vue
++++ b/src/layouts/default/AppBar.vue
+@@ -3,6 +3,26 @@
+     <v-icon v-if="isMobile" icon="mdi-menu" @click="$emit('toggleDrawer')" />
+     <span v-else style="width: 24px"></span>
+     <v-app-bar-title :text="$t(<string>route.name)" class="align-center text-center " />
++    <v-menu v-if="servers.length > 0 || currentServer">
++      <template v-slot:activator="{ props }">
++        <v-btn v-bind="props" variant="tonal" size="small" class="me-1"
++          :color="currentServer ? 'warning' : 'primary'"
++          prepend-icon="mdi-server-network">
++          {{ currentServerName || $t('server.local') }}
++        </v-btn>
++      </template>
++      <v-list density="compact" nav>
++        <v-list-item @click="selectServer('')" :active="currentServer === ''">
++          <template v-slot:prepend><v-icon icon="mdi-home"></v-icon></template>
++          <v-list-item-title>{{ $t('server.local') }}</v-list-item-title>
++        </v-list-item>
++        <v-divider></v-divider>
++        <v-list-item v-for="s in servers" :key="s.id" @click="selectServer(String(s.id))" :active="currentServer === String(s.id)">
++          <template v-slot:prepend><v-icon icon="mdi-server"></v-icon></template>
++          <v-list-item-title>{{ s.name }}</v-list-item-title>
++        </v-list-item>
++      </v-list>
++    </v-menu>
+     <v-menu>
+       <template v-slot:activator="{ props }">
+         <v-btn icon v-bind="props">
+@@ -23,18 +43,20 @@
+     <v-menu>
+       <template v-slot:activator="{ props }">
+         <v-btn icon v-bind="props">
+-          <v-icon>mdi-theme-light-dark</v-icon>
++          <v-icon>mdi-palette</v-icon>
+         </v-btn>
+       </template>
+-      <v-list>
++      <v-list density="compact">
+         <v-list-item
+-          v-for="th in themes"
+-          :key="th.value"
+-          @click="changeTheme(th.value)"
+-          :prepend-icon="th.icon"
+-          :active="isActiveTheme(th.value)"
++          v-for="sk in skins"
++          :key="sk.id"
++          @click="changeSkin(sk.id)"
++          :active="currentSkin === sk.id"
+         >
+-          <v-list-item-title>{{ $t(`theme.${th.value}`) }}</v-list-item-title>
++          <template v-slot:prepend>
++            <span class="skin-swatch" :style="{ backgroundImage: sk.swatch }"></span>
++          </template>
++          <v-list-item-title>{{ $t(`skin.${sk.id}`) }}</v-list-item-title>
+         </v-list-item>
+       </v-list>
+     </v-menu>
+@@ -45,10 +67,23 @@
+ import { useLocale, useTheme } from 'vuetify'
+ import { useRoute } from 'vue-router'
+ import { useI18n } from 'vue-i18n'
++import { computed, ref } from 'vue'
+ import { languages } from '@/locales'
++import Data from '@/store/modules/data'
++import { SKINS, savedSkin, applySkinAttr, type SkinId } from '@/plugins/skins'
+ 
+ defineProps(['isMobile'])
+ 
++const servers = computed((): any[] => Data().servers ?? [])
++const currentServer = computed((): string => Data().currentServer)
++const currentServerName = computed((): string => {
++  const id = Data().currentServer
++  if (!id) return ''
++  const s = (Data().servers || []).find((x: any) => String(x.id) === id)
++  return s?.name ?? id
++})
++const selectServer = (id: string) => Data().setCurrentServer(id)
++
+ const route = useRoute()
+ const { locale: i18nLocale } = useI18n()
+ const vuetifyLocale = useLocale()
+@@ -61,18 +96,26 @@ const changeLocale = (l: string) => {
+   window.location.reload()
+ }
+ const isActiveLocale = (l: string) => i18nLocale.value === l
+-const themes = [
+-  { value: 'light', icon: 'mdi-white-balance-sunny' },
+-  { value: 'dark', icon: 'mdi-moon-waning-crescent' },
+-  { value: 'system', icon: 'mdi-laptop' },
+-]
+-
+-const changeTheme = (th: string) => {
+-  theme.change(th)
+-  localStorage.setItem('theme', th)
+-}
+-const isActiveTheme = (th: string) => {
+-  const current = localStorage.getItem('theme') ?? 'system'
+-  return current == th
++// Gradient skins replace the old light/dark/system toggle: each skin carries
++// its own base theme, so picking one sets both the gradient and the contrast.
++const skins = SKINS
++const currentSkin = ref<SkinId>(savedSkin().id)
++const changeSkin = (id: SkinId) => {
++  const sk = SKINS.find((s) => s.id === id)!
++  theme.change(sk.base)
++  applySkinAttr(id)
++  localStorage.setItem('skin', id)
++  currentSkin.value = id
+ }
+ </script>
++
++<style scoped>
++.skin-swatch {
++  display: inline-block;
++  width: 22px;
++  height: 22px;
++  border-radius: 6px;
++  margin-inline-end: 10px;
++  border: 1px solid rgba(128, 128, 128, 0.45);
++}
++</style>
+diff --git a/src/layouts/default/Drawer.vue b/src/layouts/default/Drawer.vue
+index 87fc374..fcab446 100644
+--- a/src/layouts/default/Drawer.vue
++++ b/src/layouts/default/Drawer.vue
+@@ -32,6 +32,12 @@
+       </v-list-item>
+     </v-list>
+     <template v-slot:append>
++      <v-list-item prepend-icon="mdi-web" :title="$t('menu.site')"
++        href="https://3yuedaohang.com" target="_blank" rel="noopener noreferrer"></v-list-item>
++      <v-list-item prepend-icon="mdi-youtube" :title="$t('menu.youtube')"
++        href="https://www.youtube.com/@zhanzhang3yue" target="_blank" rel="noopener noreferrer"></v-list-item>
++      <v-list-item prepend-icon="mdi-server" :title="$t('menu.vps')"
++        href="https://3yuedaohang.com/cn2/banwagong" target="_blank" rel="noopener noreferrer"></v-list-item>
+       <v-list-item prepend-icon="mdi-logout" :title="$t('menu.logout')" @click="Logout"></v-list-item>
+     </template>
+   </v-navigation-drawer>
+@@ -51,6 +57,8 @@ const showDrawer = computed((): boolean => {
+ const menu = [
+   { title: 'pages.home', icon: 'mdi-home',  path: '/' },
+   { title: 'pages.inbounds', icon: 'mdi-cloud-download',  path: '/inbounds' },
++  { title: 'pages.relay', icon: 'mdi-transit-connection-variant',  path: '/relay' },
++  { title: 'pages.servers', icon: 'mdi-server-network',  path: '/servers' },
+   { title: 'pages.clients', icon: 'mdi-account-multiple',  path: '/clients' },
+   { title: 'pages.outbounds', icon: 'mdi-cloud-upload',  path: '/outbounds' },
+   { title: 'pages.endpoints', icon: 'mdi-cloud-tags',  path: '/endpoints' },
+diff --git a/src/layouts/modals/ExportLinks.vue b/src/layouts/modals/ExportLinks.vue
+new file mode 100644
+index 0000000..1ffaff7
+--- /dev/null
++++ b/src/layouts/modals/ExportLinks.vue
+@@ -0,0 +1,180 @@
++<template>
++  <v-dialog transition="dialog-bottom-transition" width="760">
++    <v-card class="rounded-lg" id="export-links-modal" :loading="loading">
++      <v-card-title>
++        <v-row>
++          <v-col>{{ $t('exportLinks.title') }}</v-col>
++          <v-spacer></v-spacer>
++          <v-col cols="auto"><v-icon icon="mdi-close-box" @click="$emit('close')" /></v-col>
++        </v-row>
++      </v-card-title>
++      <v-divider></v-divider>
++      <v-tabs v-model="tab" density="compact" fixed-tabs align-tabs="center">
++        <v-tab value="sub">{{ $t('exportLinks.subTab') }}</v-tab>
++        <v-tab value="links">{{ $t('exportLinks.linksTab') }}</v-tab>
++      </v-tabs>
++      <v-card-text>
++        <v-window v-model="tab" style="margin-top: 6px;">
++          <!-- Subscription: one URL per client, add once, auto-updates -->
++          <v-window-item value="sub">
++            <p style="font-size: 0.85rem; opacity: 0.8; margin-bottom: 12px;">{{ $t('exportLinks.subDesc') }}</p>
++            <div v-if="subList.length === 0" style="text-align: center; opacity: 0.6; padding: 20px;">{{ $t('exportLinks.empty') }}</div>
++            <v-card v-for="s in subList" :key="s.name" variant="outlined" class="rounded-lg" style="margin-bottom: 14px; padding: 12px;">
++              <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
++                <v-chip size="small" color="primary">{{ s.name }}</v-chip>
++                <v-text-field
++                  :model-value="s.uri"
++                  readonly
++                  density="compact"
++                  hide-details
++                  variant="outlined"
++                  append-inner-icon="mdi-content-copy"
++                  @click:append-inner="copy(s.uri)"
++                  style="font-size: 0.76rem;">
++                </v-text-field>
++              </div>
++              <div style="text-align: center;">
++                <QrcodeVue :value="s.uri" :size="180" :margin="1" @click="copy(s.uri)" style="border-radius: 10px; cursor: copy;" />
++              </div>
++            </v-card>
++          </v-window-item>
++
++          <!-- All links: paste into v2rayN bulk import -->
++          <v-window-item value="links">
++            <p style="font-size: 0.85rem; opacity: 0.8; margin-bottom: 10px;">{{ $t('exportLinks.desc') }}</p>
++            <v-btn-toggle
++              v-model="format"
++              mandatory
++              density="compact"
++              variant="outlined"
++              color="primary"
++              style="margin-bottom: 10px;">
++              <v-btn value="plain" size="small">{{ $t('exportLinks.plain') }}</v-btn>
++              <v-btn value="base64" size="small">{{ $t('exportLinks.base64') }}</v-btn>
++            </v-btn-toggle>
++            <p v-if="format === 'base64'" style="font-size: 0.8rem; opacity: 0.7; margin-bottom: 8px;">{{ $t('exportLinks.base64Hint') }}</p>
++            <v-textarea
++              :model-value="displayText"
++              :rows="10"
++              readonly
++              variant="outlined"
++              hide-details
++              :placeholder="$t('exportLinks.empty')"
++              style="font-family: monospace; font-size: 0.78rem;">
++            </v-textarea>
++            <div style="text-align: end; margin-top: 10px;">
++              <span style="font-size: 0.8rem; opacity: 0.7; margin-inline-end: 10px;">{{ count }}</span>
++              <v-btn color="primary" variant="tonal" :disabled="!text" @click="copy(displayText)">{{ $t('exportLinks.copy') }}</v-btn>
++            </div>
++          </v-window-item>
++        </v-window>
++      </v-card-text>
++      <v-card-actions>
++        <v-spacer></v-spacer>
++        <v-btn color="primary" variant="outlined" @click="$emit('close')">{{ $t('actions.close') }}</v-btn>
++      </v-card-actions>
++    </v-card>
++  </v-dialog>
++</template>
++
++<script lang="ts">
++import QrcodeVue from 'qrcode.vue'
++import Data from '@/store/modules/data'
++import HttpUtils from '@/plugins/httputil'
++import Clipboard from 'clipboard'
++import { i18n } from '@/locales'
++import { push } from 'notivue'
++
++export default {
++  props: ['visible'],
++  emits: ['close'],
++  data() {
++    return {
++      loading: false,
++      tab: 'sub',
++      text: '',
++      count: 0,
++      format: 'plain',
++      subList: <any[]>[],
++    }
++  },
++  watch: {
++    visible(v: boolean) {
++      if (v) this.load()
++    },
++  },
++  computed: {
++    displayText(): string {
++      if (this.format === 'base64' && this.text) {
++        try {
++          // UTF-8 safe base64 (links may carry non-ASCII remarks).
++          return btoa(unescape(encodeURIComponent(this.text)))
++        } catch {
++          return this.text
++        }
++      }
++      return this.text
++    },
++  },
++  methods: {
++    async load() {
++      this.loading = true
++      this.tab = 'sub'
++      this.format = 'plain'
++      this.text = ''
++      this.count = 0
++
++      // Subscription URLs: one per client (covers all its protocols, auto-updates).
++      const subBase = Data().subURI
++      this.subList = Data().clients.map((c: any) => ({ name: c.name, uri: subBase + c.name }))
++
++      // All share links: one request fetches full client rows (with links).
++      const ids = Data().clients.map((c: any) => c.id).filter((x: any) => x)
++      if (ids.length > 0) {
++        const msg = await HttpUtils.get('api/clients', { id: ids.join(',') })
++        if (msg.success && msg.obj?.clients) {
++          const uris: string[] = []
++          msg.obj.clients.forEach((c: any) => {
++            (c.links || []).forEach((l: any) => {
++              if (l.type !== 'sub' && l.uri) uris.push(l.uri)
++            })
++          })
++          this.text = uris.join('\n')
++          this.count = uris.length
++        }
++      }
++      this.loading = false
++    },
++    copy(txt: string) {
++      if (!txt) return
++      const hiddenButton = document.createElement('button')
++      hiddenButton.className = 'export-clipboard-btn'
++      document.body.appendChild(hiddenButton)
++
++      const clipboard = new Clipboard('.export-clipboard-btn', {
++        text: () => txt,
++        container: document.getElementById('export-links-modal') ?? undefined,
++      })
++
++      clipboard.on('success', () => {
++        clipboard.destroy()
++        push.success({
++          message: i18n.global.t('success') + ': ' + i18n.global.t('copyToClipboard'),
++          duration: 3000,
++        })
++      })
++      clipboard.on('error', () => {
++        clipboard.destroy()
++        push.error({
++          message: i18n.global.t('failed') + ': ' + i18n.global.t('copyToClipboard'),
++          duration: 3000,
++        })
++      })
++
++      hiddenButton.click()
++      document.body.removeChild(hiddenButton)
++    },
++  },
++  components: { QrcodeVue },
++}
++</script>
+diff --git a/src/layouts/modals/QrCode.vue b/src/layouts/modals/QrCode.vue
+index 674140a..5489913 100644
+--- a/src/layouts/modals/QrCode.vue
++++ b/src/layouts/modals/QrCode.vue
+@@ -22,8 +22,8 @@
+           fixed-tabs
+           align-tabs="center"
+         >
+-          <v-tab value="sub">{{ $t('setting.sub') }}</v-tab>
+           <v-tab value="link">{{ $t('client.links') }}</v-tab>
++          <v-tab value="sub">{{ $t('setting.sub') }}</v-tab>
+         </v-tabs>
+         <v-window v-model="tab" style="margin-top: 10px;">
+           <v-window-item value="sub">
+@@ -77,7 +77,7 @@ export default {
+   props: ['id', 'visible'],
+   data() {
+     return {
+-      tab: "sub",
++      tab: "link",
+       client: <any>{},
+       loading: false,
+     }
+@@ -140,7 +140,7 @@ export default {
+   watch: {
+     visible(v) {
+       if (v) {
+-        this.tab = "sub"
++        this.tab = "link"
+         this.load()
+       }
+     },
+diff --git a/src/layouts/modals/QuickTemplate.vue b/src/layouts/modals/QuickTemplate.vue
+new file mode 100644
+index 0000000..af42638
+--- /dev/null
++++ b/src/layouts/modals/QuickTemplate.vue
+@@ -0,0 +1,396 @@
++<template>
++  <v-dialog transition="dialog-bottom-transition" width="600">
++    <v-card class="rounded-lg" :loading="loading">
++      <v-card-title>{{ $t('quickTemplate.title') }}</v-card-title>
++      <v-divider></v-divider>
++      <v-card-text>
++        <v-container style="padding: 0;">
++          <v-row v-if="hasServers">
++            <v-col cols="12">
++              <v-select
++                hide-details
++                :label="$t('server.deployTo')"
++                :items="serverOptions"
++                v-model="deployTo">
++              </v-select>
++            </v-col>
++          </v-row>
++          <v-row>
++            <v-col cols="12">
++              <v-select
++                hide-details
++                :label="$t('quickTemplate.pick')"
++                :items="templates"
++                v-model="selected">
++              </v-select>
++            </v-col>
++          </v-row>
++          <v-row v-if="selectedTemplate">
++            <v-col cols="12">
++              <v-card variant="tonal" color="primary">
++                <v-card-text style="font-size: 0.85rem;">{{ selectedTemplate.desc }}</v-card-text>
++              </v-card>
++            </v-col>
++          </v-row>
++          <v-row>
++            <v-col cols="12" :sm="needsPort ? 6 : 12">
++              <v-text-field
++                :label="$t('client.name')"
++                v-model="form.clientName"
++                hide-details>
++              </v-text-field>
++            </v-col>
++            <v-col cols="12" sm="6" v-if="needsPort">
++              <v-text-field
++                :label="$t('in.port')"
++                type="number"
++                v-model.number="form.port"
++                hide-details>
++              </v-text-field>
++            </v-col>
++            <v-col cols="12" v-if="needsSni">
++              <v-combobox
++                :label="$t('quickTemplate.sni')"
++                :hint="$t('quickTemplate.sniHint')"
++                persistent-hint
++                :items="sniPresets"
++                v-model="form.sni">
++              </v-combobox>
++            </v-col>
++          </v-row>
++        </v-container>
++      </v-card-text>
++      <v-card-actions>
++        <v-spacer></v-spacer>
++        <v-btn color="primary" variant="outlined" @click="closeModal">
++          {{ $t('actions.close') }}
++        </v-btn>
++        <v-btn color="primary" variant="tonal" :loading="loading" @click="create">
++          {{ $t('quickTemplate.create') }}
++        </v-btn>
++      </v-card-actions>
++    </v-card>
++  </v-dialog>
++</template>
++
++<script lang="ts">
++import Data from '@/store/modules/data'
++import HttpUtils from '@/plugins/httputil'
++import RandomUtil from '@/plugins/randomUtil'
++import { createInbound } from '@/types/inbounds'
++import { randomConfigs } from '@/types/clients'
++import { i18n } from '@/locales'
++import { push } from 'notivue'
++
++export default {
++  props: ['visible'],
++  emits: ['close'],
++  data() {
++    return {
++      loading: false,
++      selected: 'all',
++      form: {
++        clientName: '',
++        port: 0,
++        sni: 'www.apple.com',
++      },
++      // Known reliable Reality handshake targets (TLS1.3 + HTTP/2, own infra).
++      sniPresets: ['www.apple.com', 'addons.mozilla.org', 'www.amazon.com', 'www.tesla.com', 'www.microsoft.com', 'www.bing.com'],
++    }
++  },
++  watch: {
++    visible(v: boolean) {
++      if (v) this.reset()
++    },
++  },
++  computed: {
++    // "Deploy to" — which server the created node lands on. Picking a remote
++    // switches the panel context to it (reusing the central-management proxy).
++    hasServers(): boolean {
++      return (Data().servers || []).length > 0
++    },
++    serverOptions(): any[] {
++      return [
++        { title: i18n.global.t('server.local'), value: '' },
++        ...(Data().servers || []).map((s: any) => ({ title: s.name, value: String(s.id) })),
++      ]
++    },
++    deployTo: {
++      get(): string { return Data().currentServer },
++      set(v: string) { Data().setCurrentServer(v ?? '') },
++    },
++    templates() {
++      const t = (k: string) => i18n.global.t('quickTemplate.' + k)
++      return [
++        { title: t('all'), value: 'all' },
++        { title: t('vlessReality'), value: 'vless-reality' },
++        { title: t('hysteria2'), value: 'hysteria2' },
++        { title: t('tuic'), value: 'tuic' },
++        { title: t('trojan'), value: 'trojan' },
++        { title: t('anytls'), value: 'anytls' },
++      ]
++    },
++    descKey(): string {
++      const map: any = {
++        'all': 'allDesc',
++        'vless-reality': 'vlessRealityDesc',
++        'shadowsocks': 'shadowsocksDesc',
++        'hysteria2': 'hysteria2Desc',
++        'tuic': 'tuicDesc',
++        'trojan': 'trojanDesc',
++        'vmess': 'vmessDesc',
++        'anytls': 'anytlsDesc',
++      }
++      return map[this.selected]
++    },
++    selectedTemplate(): any {
++      // {n} in allDesc = how many protocols "★ All" actually builds, derived
++      // from the template list (minus the "all" entry) so the copy never goes
++      // stale when protocols are added/removed. Ignored by descs without {n}.
++      return { desc: i18n.global.t('quickTemplate.' + this.descKey, { n: this.templates.length - 1 }) }
++    },
++    needsSni(): boolean {
++      // Everything except Shadowsocks needs a domain (Reality handshake target
++      // for VLESS, certificate name for the self-signed protocols).
++      return this.selected !== 'shadowsocks'
++    },
++    needsPort(): boolean {
++      // "All" auto-assigns a distinct port per protocol.
++      return this.selected !== 'all'
++    },
++  },
++  methods: {
++    reset() {
++      this.selected = 'all'
++      this.form = {
++        clientName: 'user-' + RandomUtil.randomLowerAndNum(6),
++        port: RandomUtil.randomIntRange(10000, 60000),
++        sni: 'www.apple.com',
++      }
++      this.loading = false
++    },
++    closeModal() {
++      this.$emit('close')
++    },
++    async create() {
++      // Resolve and lock the client name so every step uses the same value.
++      if (!this.form.clientName) this.form.clientName = 'user-' + RandomUtil.randomLowerAndNum(6)
++      const clientName = this.form.clientName.trim()
++      if (Data().clients.some((c: any) => c.name === clientName)) {
++        push.error({ message: i18n.global.t('quickTemplate.failName') })
++        return
++      }
++      const port = Number(this.form.port)
++      if (this.needsPort && (!Number.isInteger(port) || port < 1 || port > 65535)) {
++        push.error({ message: i18n.global.t('error.invalidData') + ': ' + i18n.global.t('in.port') })
++        return
++      }
++
++      this.loading = true
++      try {
++        let clientId: number | null = null
++        switch (this.selected) {
++          case 'all': clientId = await this.buildAll(clientName); break
++          case 'vless-reality': clientId = await this.buildVlessReality(port, clientName); break
++          case 'hysteria2': clientId = await this.buildSelfSigned(port, clientName, 'hysteria2', 'hysteria2', { hysteria2: { name: clientName, password: RandomUtil.randomSeq(10) } }); break
++          case 'tuic': clientId = await this.buildSelfSigned(port, clientName, 'tuic', 'tuic', { tuic: { name: clientName, uuid: RandomUtil.randomUUID(), password: RandomUtil.randomSeq(10) } }, ['h3']); break
++          case 'trojan': clientId = await this.buildSelfSigned(port, clientName, 'trojan', 'trojan', { trojan: { name: clientName, password: RandomUtil.randomSeq(10) } }); break
++          case 'anytls': clientId = await this.buildSelfSigned(port, clientName, 'anytls', 'anytls', { anytls: { name: clientName, password: RandomUtil.randomSeq(10) } }); break
++        }
++        if (clientId) {
++          push.success({ title: i18n.global.t('success'), message: i18n.global.t('quickTemplate.success') })
++          this.closeModal()
++        }
++      } catch (e: any) {
++        push.error({ message: i18n.global.t('error.invalidData') + ': ' + (e?.toString() ?? '') })
++      } finally {
++        this.loading = false
++      }
++    },
++
++    // ---- low-level helpers ----------------------------------------------
++    err(detail: string) {
++      push.error({ message: i18n.global.t('error.invalidData') + ': ' + detail })
++    },
++    tagExists(tag: string): boolean {
++      if (Data().inbounds.some((i: any) => i.tag === tag)) {
++        push.error({ message: i18n.global.t('quickTemplate.failName') })
++        return true
++      }
++      return false
++    },
++    sniOr(fallback: string): string {
++      return (this.form.sni || fallback).trim()
++    },
++    newClientId(clientName: string): number | null {
++      return Data().clients.find((c: any) => c.name === clientName)?.id ?? null
++    },
++    async genReality(): Promise<{ priv: string, pub: string } | null> {
++      const kp = await HttpUtils.get('api/keypairs', { k: 'reality' })
++      if (!kp.success) return null
++      let priv = '', pub = ''
++      kp.obj.forEach((line: string) => {
++        if (line.startsWith('PrivateKey')) priv = line.substring(12)
++        if (line.startsWith('PublicKey')) pub = line.substring(11)
++      })
++      return (priv && pub) ? { priv, pub } : null
++    },
++    async genSelfSigned(sni: string): Promise<{ cert: string[], key: string[] } | null> {
++      const msg = await HttpUtils.get('api/keypairs', { k: 'tls', o: sni || "''" })
++      if (!msg.success || !msg.obj || msg.obj.length === 0) return null
++      const key: string[] = [], cert: string[] = []
++      let inKey = false, inCert = false
++      msg.obj.forEach((line: string) => {
++        if (line === '-----BEGIN PRIVATE KEY-----') { inKey = true; inCert = false; key.push(line) }
++        else if (line === '-----END PRIVATE KEY-----') { inKey = false; key.push(line) }
++        else if (line === '-----BEGIN CERTIFICATE-----') { inCert = true; inKey = false; cert.push(line) }
++        else if (line === '-----END CERTIFICATE-----') { inCert = false; cert.push(line) }
++        else if (inKey) key.push(line)
++        else if (inCert) cert.push(line)
++      })
++      return (key.length && cert.length) ? { cert, key } : null
++    },
++    async saveTls(tlsObj: any): Promise<number | null> {
++      if (!await Data().save('tls', 'new', tlsObj)) return null
++      return Data().tlsConfigs.find((t: any) => t.name === tlsObj.name)?.id ?? null
++    },
++    async saveInbound(inbound: any, rollbackTlsId?: number): Promise<number | null> {
++      if (!await Data().save('inbounds', 'new', inbound)) {
++        if (rollbackTlsId) await Data().save('tls', 'del', rollbackTlsId)
++        return null
++      }
++      return Data().inbounds.find((i: any) => i.tag === inbound.tag)?.id ?? null
++    },
++    async saveClient(clientName: string, inboundIds: number[], config: any): Promise<number | null> {
++      const client = {
++        enable: true,
++        name: clientName,
++        config: config,
++        inbounds: inboundIds,
++        links: [],
++        volume: 0,
++        expiry: 0,
++        up: 0,
++        down: 0,
++        desc: '',
++        group: '',
++      }
++      if (!await Data().save('clients', 'new', client)) return null
++      return this.newClientId(clientName)
++    },
++
++    // ---- inbound-only builders (return the new inbound id) ---------------
++    async inboundReality(port: number, sni: string): Promise<number | null> {
++      const tag = 'vless-reality-' + port
++      if (this.tagExists(tag)) return null
++      const kp = await this.genReality()
++      if (!kp) { this.err('keypair'); return null }
++      // Use a single non-empty hex short_id. The pre-generated share link picks
++      // one short_id at random from the server list; an empty one (sid=) is
++      // mishandled by some clients, so pin a concrete value for reliability.
++      const sid = RandomUtil.randomShortId().find((s: string) => s.length >= 2) || 'a1b2c3d4'
++      const tlsObj = {
++        id: 0,
++        name: 'reality-' + port + '-' + RandomUtil.randomLowerAndNum(4),
++        server: {
++          enabled: true,
++          server_name: sni,
++          reality: {
++            enabled: true,
++            handshake: { server: sni, server_port: 443 },
++            private_key: kp.priv,
++            short_id: [sid],
++          },
++        },
++        client: {
++          reality: { enabled: true, public_key: kp.pub, short_id: sid },
++          utls: { enabled: true, fingerprint: 'chrome' },
++        },
++      }
++      const tlsId = await this.saveTls(tlsObj)
++      if (!tlsId) { this.err('TLS'); return null }
++      const inbound: any = createInbound('vless', { id: 0, tag, listen: '::', listen_port: port, tls_id: tlsId })
++      inbound.addrs = []
++      inbound.out_json = {}
++      return this.saveInbound(inbound, tlsId)
++    },
++    async inboundShadowsocks(port: number): Promise<number | null> {
++      const tag = 'shadowsocks-' + port
++      if (this.tagExists(tag)) return null
++      const inbound: any = createInbound('shadowsocks', { id: 0, tag, listen: '::', listen_port: port })
++      inbound.method = '2022-blake3-aes-256-gcm'
++      inbound.password = RandomUtil.randomShadowsocksPassword(32)
++      inbound.addrs = []
++      inbound.out_json = {}
++      return this.saveInbound(inbound)
++    },
++    async inboundSelfSigned(port: number, type: string, tagPrefix: string, sni: string, alpn?: string[]): Promise<number | null> {
++      const tag = tagPrefix + '-' + port
++      if (this.tagExists(tag)) return null
++      const ss = await this.genSelfSigned(sni)
++      if (!ss) { this.err('cert'); return null }
++      // TUIC/VMess need an ALPN on the TLS server or the handshake fails
++      // ("server did not select an ALPN protocol"). prepareTls copies the
++      // server alpn to the client side, so the share link carries it too.
++      const server: any = { enabled: true, server_name: sni, certificate: ss.cert, key: ss.key }
++      if (alpn && alpn.length) server.alpn = alpn
++      const tlsObj = {
++        id: 0,
++        name: tagPrefix + '-' + port + '-' + RandomUtil.randomLowerAndNum(4),
++        server,
++        client: { enabled: true, insecure: true, server_name: sni },
++      }
++      const tlsId = await this.saveTls(tlsObj)
++      if (!tlsId) { this.err('TLS'); return null }
++      const inbound: any = createInbound(type, { id: 0, tag, listen: '::', listen_port: port, tls_id: tlsId })
++      inbound.addrs = []
++      inbound.out_json = {}
++      return this.saveInbound(inbound, tlsId)
++    },
++
++    // ---- single-protocol templates --------------------------------------
++    async buildVlessReality(port: number, clientName: string): Promise<number | null> {
++      const id = await this.inboundReality(port, this.sniOr('www.apple.com'))
++      if (!id) return null
++      return this.saveClient(clientName, [id], { vless: { name: clientName, uuid: RandomUtil.randomUUID(), flow: 'xtls-rprx-vision' } })
++    },
++    async buildShadowsocks(port: number, clientName: string): Promise<number | null> {
++      const id = await this.inboundShadowsocks(port)
++      if (!id) return null
++      return this.saveClient(clientName, [id], { shadowsocks: { name: clientName, password: RandomUtil.randomShadowsocksPassword(32) } })
++    },
++    async buildSelfSigned(port: number, clientName: string, type: string, tagPrefix: string, config: any, alpn?: string[]): Promise<number | null> {
++      const id = await this.inboundSelfSigned(port, type, tagPrefix, this.sniOr('www.bing.com'), alpn)
++      if (!id) return null
++      return this.saveClient(clientName, [id], config)
++    },
++
++    // ---- all protocols, one shared client -------------------------------
++    async buildAll(clientName: string): Promise<number | null> {
++      const sni = this.sniOr('www.apple.com')
++      const used = new Set<number>(Data().inbounds.map((i: any) => i.listen_port))
++      const pickPort = (): number => {
++        let p = 0
++        do { p = RandomUtil.randomIntRange(10000, 60000) } while (used.has(p))
++        used.add(p)
++        return p
++      }
++
++      const ids: number[] = []
++      const collect = (id: number | null) => { if (id) ids.push(id) }
++
++      collect(await this.inboundReality(pickPort(), sni))
++      collect(await this.inboundSelfSigned(pickPort(), 'hysteria2', 'hysteria2', sni))
++      collect(await this.inboundSelfSigned(pickPort(), 'tuic', 'tuic', sni, ['h3']))
++      collect(await this.inboundSelfSigned(pickPort(), 'trojan', 'trojan', sni))
++      collect(await this.inboundSelfSigned(pickPort(), 'anytls', 'anytls', sni))
++
++      if (ids.length === 0) { this.err(i18n.global.t('objects.inbound')); return null }
++
++      // One client across every created inbound. randomConfigs carries a
++      // matching config for each protocol; unused keys are ignored.
++      return this.saveClient(clientName, ids, randomConfigs(clientName))
++    },
++  },
++}
++</script>
+diff --git a/src/layouts/modals/RelayWizard.vue b/src/layouts/modals/RelayWizard.vue
+new file mode 100644
+index 0000000..5277869
+--- /dev/null
++++ b/src/layouts/modals/RelayWizard.vue
+@@ -0,0 +1,189 @@
++<template>
++  <v-dialog transition="dialog-bottom-transition" width="640">
++    <v-card class="rounded-lg" :loading="loading">
++      <v-card-title>{{ $t('relay.title') }}</v-card-title>
++      <v-divider></v-divider>
++      <v-card-text>
++        <v-container style="padding: 0;">
++          <p style="font-size: 0.85rem; opacity: 0.8; margin-bottom: 12px;">{{ $t('relay.desc') }}</p>
++          <v-row>
++            <v-col cols="12">
++              <v-textarea
++                :label="$t('relay.link')"
++                :hint="$t('relay.linkHint')"
++                persistent-hint
++                v-model="form.link"
++                :rows="2"
++                auto-grow>
++              </v-textarea>
++            </v-col>
++            <v-col cols="12" sm="6">
++              <v-text-field
++                :label="$t('relay.name')"
++                v-model="form.name"
++                hide-details>
++              </v-text-field>
++            </v-col>
++            <v-col cols="12">
++              <v-select
++                :label="$t('relay.entry')"
++                :hint="$t('relay.entryHint')"
++                persistent-hint
++                :items="inboundOptions"
++                v-model="form.inbounds"
++                multiple
++                chips>
++              </v-select>
++            </v-col>
++          </v-row>
++          <v-row v-if="result">
++            <v-col cols="12">
++              <v-alert :type="result.ok ? 'success' : 'warning'" density="compact" variant="tonal">
++                {{ result.text }}
++              </v-alert>
++            </v-col>
++          </v-row>
++        </v-container>
++      </v-card-text>
++      <v-card-actions>
++        <v-spacer></v-spacer>
++        <v-btn color="primary" variant="outlined" @click="closeModal">{{ $t('actions.close') }}</v-btn>
++        <v-btn color="primary" variant="tonal" :loading="loading" @click="createRelay">{{ $t('relay.create') }}</v-btn>
++      </v-card-actions>
++    </v-card>
++  </v-dialog>
++</template>
++
++<script lang="ts">
++import Data from '@/store/modules/data'
++import HttpUtils from '@/plugins/httputil'
++import RandomUtil from '@/plugins/randomUtil'
++import { i18n } from '@/locales'
++import { push } from 'notivue'
++
++export default {
++  props: ['visible'],
++  emits: ['close'],
++  data() {
++    return {
++      loading: false,
++      form: { link: '', name: '', inbounds: <string[]>[] },
++      result: <any>null,
++    }
++  },
++  watch: {
++    visible(v: boolean) {
++      if (v) this.reset()
++    },
++  },
++  computed: {
++    // Inbounds that can act as a relay entry (those that carry user traffic).
++    inboundOptions(): string[] {
++      return (Data().inbounds || [])
++        .filter((i: any) => i.tag && i.users)
++        .map((i: any) => i.tag)
++    },
++  },
++  methods: {
++    reset() {
++      // Start with NO entry selected. A relay route rule redirects each selected
++      // inbound's egress to the landing, so pre-selecting all inbounds would
++      // silently push EVERY existing node out through the landing IP (the "my
++      // original nodes all turned into the relay's IP" bug). Make the user pick
++      // exactly which node(s) to relay.
++      this.form = { link: '', name: '', inbounds: [] }
++      this.result = null
++      this.loading = false
++    },
++    closeModal() {
++      this.$emit('close')
++    },
++    // Parse a SOCKS5 landing into a sing-box socks outbound, or return null.
++    // Accepts: socks5://[user:pass@]host:port  and  IP:PORT[:USER:PASS]
++    parseSocks(raw: string): any | null {
++      const uri = raw.match(/^socks5?:\/\/(?:([^:@/]+):([^@/]+)@)?\[?([^\]:/]+)\]?:(\d{1,5})\/?.*$/i)
++      if (uri) {
++        const ob: any = { type: 'socks', server: uri[3], server_port: parseInt(uri[4]), version: '5' }
++        if (uri[1]) { ob.username = decodeURIComponent(uri[1]); ob.password = decodeURIComponent(uri[2]) }
++        return ob
++      }
++      const parts = raw.split(':')
++      if ((parts.length === 2 || parts.length === 4) && /^(\d{1,3}\.){3}\d{1,3}$/.test(parts[0])) {
++        const port = parseInt(parts[1])
++        if (!Number.isInteger(port) || port < 1 || port > 65535) return null
++        const ob: any = { type: 'socks', server: parts[0], server_port: port, version: '5' }
++        if (parts.length === 4) { ob.username = parts[2]; ob.password = parts[3] }
++        return ob
++      }
++      return null
++    },
++    async createRelay() {
++      const link = (this.form.link || '').trim()
++      if (!link) {
++        push.error({ message: i18n.global.t('error.invalidData') + ': ' + i18n.global.t('relay.link') })
++        return
++      }
++      if (this.form.inbounds.length === 0) {
++        push.error({ message: i18n.global.t('error.invalidData') + ': ' + i18n.global.t('relay.entry') })
++        return
++      }
++      this.loading = true
++      this.result = null
++      try {
++        // 1) Build the landing outbound. SOCKS5 (raw IP:PORT[:USER:PASS] or
++        // socks5:// URI) is handled here; everything else goes through the
++        // backend share-link converter.
++        let outbound: any = this.parseSocks(link)
++        if (!outbound) {
++          const conv = await HttpUtils.post('api/linkConvert', { link })
++          if (!conv.success || !conv.obj || !conv.obj.type) {
++            push.error({ message: i18n.global.t('relay.convertFail') })
++            return
++          }
++          outbound = conv.obj
++        }
++
++        // 2) Pick a unique tag for the landing outbound.
++        const base = (this.form.name || '').trim() || outbound.tag || ('relay-' + RandomUtil.randomLowerAndNum(6))
++        const used = new Set<string>([
++          ...(Data().outbounds || []).map((o: any) => o.tag),
++          ...(Data().endpoints || []).map((e: any) => e.tag),
++          ...(Data().inbounds || []).map((i: any) => i.tag),
++        ])
++        let tag = base
++        let n = 1
++        while (used.has(tag)) tag = base + '-' + (n++)
++        outbound.tag = tag
++        delete outbound.id
++
++        // 3) Save the outbound.
++        if (!await Data().save('outbounds', 'new', outbound)) return
++
++        // 4) Add a route rule: entry inbound(s) -> this landing outbound.
++        const config = JSON.parse(JSON.stringify(Data().config || {}))
++        if (!config.route) config.route = {}
++        if (!Array.isArray(config.route.rules)) config.route.rules = []
++        config.route.rules.push({ inbound: [...this.form.inbounds], action: 'route', outbound: tag })
++
++        // 5) Save the full config (restarts the core: loads the outbound + route).
++        if (!await Data().save('config', 'set', config)) return
++
++        // 6) Test the landing connectivity.
++        const test = await HttpUtils.get('api/checkOutbound', { tag })
++        if (test.success && test.obj?.OK) {
++          this.result = { ok: true, text: i18n.global.t('relay.testOk') + ': ' + test.obj.Delay + i18n.global.t('date.ms') }
++          push.success({ title: i18n.global.t('success'), message: i18n.global.t('relay.success') })
++        } else {
++          this.result = { ok: false, text: i18n.global.t('relay.testFail') + ': ' + (test.obj?.Error || '') }
++          push.success({ title: i18n.global.t('success'), message: i18n.global.t('relay.successButTest') })
++        }
++        this.form.link = ''
++      } catch (e: any) {
++        push.error({ message: i18n.global.t('error.invalidData') + ': ' + (e?.toString() ?? '') })
++      } finally {
++        this.loading = false
++      }
++    },
++  },
++}
++</script>
+diff --git a/src/layouts/modals/ServerEdit.vue b/src/layouts/modals/ServerEdit.vue
+new file mode 100644
+index 0000000..ba3974b
+--- /dev/null
++++ b/src/layouts/modals/ServerEdit.vue
+@@ -0,0 +1,112 @@
++<template>
++  <v-dialog transition="dialog-bottom-transition" width="560">
++    <v-card class="rounded-lg" :loading="loading">
++      <v-card-title>{{ $t('actions.' + (form.id ? 'edit' : 'add')) + ' ' + $t('objects.server') }}</v-card-title>
++      <v-divider></v-divider>
++      <v-card-text>
++        <v-container style="padding: 0;">
++          <v-row>
++            <v-col cols="12">
++              <v-text-field
++                :label="$t('server.name')"
++                v-model="form.name"
++                hide-details>
++              </v-text-field>
++            </v-col>
++            <v-col cols="12">
++              <v-text-field
++                :label="$t('server.url')"
++                :hint="$t('server.urlHint')"
++                persistent-hint
++                v-model="form.url"
++                placeholder="http://1.2.3.4:2095/path/">
++              </v-text-field>
++            </v-col>
++            <v-col cols="12">
++              <v-text-field
++                :label="$t('server.token')"
++                :hint="$t('server.tokenHint')"
++                persistent-hint
++                :type="showPass ? 'text' : 'password'"
++                :append-inner-icon="showPass ? 'mdi-eye-off' : 'mdi-eye'"
++                @click:append-inner="showPass = !showPass"
++                v-model="form.token">
++              </v-text-field>
++            </v-col>
++            <v-col cols="12">
++              <v-text-field
++                :label="$t('server.remark')"
++                v-model="form.remark"
++                hide-details>
++              </v-text-field>
++            </v-col>
++          </v-row>
++        </v-container>
++      </v-card-text>
++      <v-card-actions>
++        <v-spacer></v-spacer>
++        <v-btn color="primary" variant="outlined" @click="closeModal">{{ $t('actions.close') }}</v-btn>
++        <v-btn color="primary" variant="tonal" :loading="loading" @click="save">{{ $t('actions.save') }}</v-btn>
++      </v-card-actions>
++    </v-card>
++  </v-dialog>
++</template>
++
++<script lang="ts">
++import Data from '@/store/modules/data'
++import { i18n } from '@/locales'
++import { push } from 'notivue'
++
++export default {
++  props: ['visible', 'server'],
++  emits: ['close'],
++  data() {
++    return {
++      loading: false,
++      showPass: false,
++      form: { id: 0, name: '', url: '', token: '', remark: '' },
++    }
++  },
++  watch: {
++    visible(v: boolean) {
++      if (v) {
++        const s = this.$props.server
++        this.form = s
++          ? { id: s.id, name: s.name, url: s.url, token: s.token ?? '', remark: s.remark }
++          : { id: 0, name: '', url: '', token: '', remark: '' }
++        this.showPass = false
++        this.loading = false
++      }
++    },
++  },
++  methods: {
++    closeModal() {
++      this.$emit('close')
++    },
++    normalizeUrl(u: string): string {
++      u = (u || '').trim()
++      if (u && !/^https?:\/\//i.test(u)) u = 'http://' + u
++      return u
++    },
++    async save() {
++      const name = (this.form.name || '').trim()
++      const url = this.normalizeUrl(this.form.url)
++      if (!name || !url) {
++        push.error({ message: i18n.global.t('error.invalidData') + ': ' + i18n.global.t('server.url') })
++        return
++      }
++      this.loading = true
++      const payload: any = {
++        name,
++        url,
++        token: (this.form.token || '').trim(),
++        remark: (this.form.remark || '').trim(),
++      }
++      if (this.form.id) payload.id = this.form.id
++      const success = await Data().save('servers', this.form.id ? 'edit' : 'new', payload)
++      this.loading = false
++      if (success) this.closeModal()
++    },
++  },
++}
++</script>
+diff --git a/src/locales/en.ts b/src/locales/en.ts
+index bdd8945..7340afe 100644
+--- a/src/locales/en.ts
++++ b/src/locales/en.ts
+@@ -26,6 +26,66 @@ export default {
+   count: "Count",
+   template: "Template",
+   editor: "Editor",
++  quickTemplate: {
++    btn: "Quick Add",
++    title: "One-Click Templates",
++    pick: "Template",
++    sni: "Camouflage Domain (SNI)",
++    sniHint: "Domain used for camouflage (Reality handshake target or self-signed certificate name)",
++    create: "Create",
++    clearAll: "Delete All",
++    clearAllConfirm: "Delete ALL inbounds (and their dedicated clients)? This cannot be undone.",
++    all: "★ All Protocols",
++    allDesc: "Create all {n} protocols at once, sharing a single client (one identity, every protocol). Ports are auto-assigned. Pops a QR with every link.",
++    vlessReality: "VLESS + Reality (Vision)",
++    vlessRealityDesc: "Recommended. No certificate needed — borrows a real site's TLS via Reality. Creates the inbound, Reality keys and the first client in one click.",
++    shadowsocks: "Shadowsocks 2022",
++    shadowsocksDesc: "Shadowsocks 2022 (blake3-aes-256-gcm). No certificate, simple and reliable.",
++    hysteria2: "Hysteria2 (self-signed TLS)",
++    hysteria2Desc: "Hysteria2 over QUIC with an auto self-signed certificate — great on lossy/high-latency links. Clients trust the self-signed certificate automatically (insecure).",
++    tuic: "TUIC (self-signed TLS)",
++    tuicDesc: "TUIC v5 over QUIC with an auto self-signed certificate. Fast on mobile / lossy links. Client trusts the cert automatically (insecure).",
++    trojan: "Trojan (self-signed TLS)",
++    trojanDesc: "Trojan over TLS with an auto self-signed certificate. Widely supported. Client trusts the cert automatically (insecure).",
++    vmess: "VMess (self-signed TLS)",
++    vmessDesc: "VMess over TLS with an auto self-signed certificate. Maximum client compatibility. Client trusts the cert automatically (insecure).",
++    anytls: "AnyTLS (self-signed TLS)",
++    anytlsDesc: "AnyTLS with an auto self-signed certificate. Newer protocol — needs a recent client. Client trusts the cert automatically (insecure).",
++    success: "Template created successfully",
++    failName: "An inbound tag or client name already exists, please try again",
++  },
++  relay: {
++    btn: "Add Relay",
++    title: "Add Relay (Transit)",
++    desc: "Forward an inbound's traffic out through a landing node. Paste the landing node's share link and choose which inbounds relay through it.",
++    link: "Landing node share link",
++    linkHint: "vless:// vmess:// trojan:// ss:// hysteria2:// tuic:// ... or SOCKS5  IP:PORT:USER:PASS",
++    name: "Relay name (optional)",
++    entry: "Entry inbound(s)",
++    entryHint: "Only the selected inbound(s) route through this landing; unselected nodes stay direct.",
++    create: "Create Relay",
++    convertFail: "Could not parse the share link",
++    success: "Relay created",
++    successButTest: "Relay created, but the landing test did not pass — check the link or re-test on the Outbounds page",
++    testOk: "Landing OK",
++    testFail: "Landing test failed",
++    empty: "No relays yet. Click \"Add Relay\" to create one.",
++    delConfirm: "Delete this relay (its route rule and the landing outbound)?",
++    clearAllConfirm: "Delete ALL relays (route rules + landing outbounds)? This cannot be undone.",
++  },
++  exportLinks: {
++    btn: "Export",
++    title: "Export Links",
++    desc: "All client share links, one per line. In v2rayN: Servers → Import bulk URL from clipboard (Ctrl+V).",
++    copy: "Copy All",
++    empty: "No links to export",
++    plain: "Plain",
++    base64: "Base64",
++    base64Hint: "Base64 (subscription content format) — for tools that import a single encoded blob.",
++    subTab: "Subscription",
++    linksTab: "All Links",
++    subDesc: "Add one subscription URL to your client (v2rayN / Shadowrocket) — it pulls every protocol of that client and auto-updates.",
++  },
+   error: {
+     dplData: "Duplicate Data",
+     core: "Sing-Box Error",
+@@ -36,10 +96,21 @@ export default {
+     dark: "Dark",
+     system: "System",
+   },
++  skin: {
++    title: "Appearance",
++    aurora: "Aurora",
++    mesh: "Mesh",
++    deepsea: "Deep Sea",
++    sunrise: "Sunrise",
++    cyber: "Cyber Neon",
++    mint: "Mint",
++  },
+   pages: {
+     login: "Login",
+     home: "Home",
+     inbounds: "Inbounds",
++    relay: "Relay",
++    servers: "Servers",
+     outbounds: "Outbounds",
+     services: "Services",
+     endpoints: "Endpoints",
+@@ -115,6 +186,32 @@ export default {
+     headers: "Headers",
+     key: "Key",
+     value: "Value",
++    server: "Server",
++  },
++  server: {
++    add: "Add Server",
++    name: "Name",
++    url: "Panel URL",
++    urlHint: "Full panel address, e.g. http://1.2.3.4:2095/path/",
++    username: "Username",
++    password: "Password",
++    token: "API Token",
++    tokenHint: "Remote APIv2 token for central management — create one on that server (it must run this s-ui fork).",
++    local: "Local",
++    deployTo: "Deploy to",
++    manage: "Manage",
++    managing: "Now managing",
++    test: "Test",
++    testing: "Testing…",
++    online: "Online",
++    offline: "Offline",
++    wipeNodes: "Also delete all nodes on this server (irreversible)",
++    remark: "Remark",
++    open: "Open",
++    openAll: "Open All",
++    copyPw: "Copy password",
++    pwCopied: "Panel opened — password copied, paste it to log in",
++    empty: "No servers yet. Add your other panels here to open them in one click.",
+   },
+   actions: {
+     action: "Action",
+@@ -136,6 +233,9 @@ export default {
+     disable: "Disable",
+     close: "Close",
+     restartApp: "Restart App",
++    updatePanel: "Update to",
++    updateConfirm: "This downloads the latest release and restarts the panel (about 1-2 minutes). Subscriptions and nodes keep working. Continue?",
++    updateStarted: "Update started. The panel will restart itself — refresh this page in a minute or two.",
+     restartSb: "Restart Singbox",
+   },
+   login: {
+@@ -147,6 +247,9 @@ export default {
+   },
+   menu: {
+     logout: "Logout",
++    site: "Blog",
++    youtube: "YouTube",
++    vps: "VPS picks",
+   },
+   admin: {
+     changeCred: "Change credentials",
+diff --git a/src/locales/zhcn.ts b/src/locales/zhcn.ts
+index d2e31f5..8ef98cc 100644
+--- a/src/locales/zhcn.ts
++++ b/src/locales/zhcn.ts
+@@ -26,6 +26,66 @@ export default {
+   count: "计数",
+   template: "模板",
+   editor: "编辑器",
++  quickTemplate: {
++    btn: "一键添加",
++    title: "一键协议模板",
++    pick: "模板",
++    sni: "伪装域名 (SNI)",
++    sniHint: "用作伪装的域名(Reality 握手目标 / 自签证书域名)",
++    create: "创建",
++    clearAll: "清空全部",
++    clearAllConfirm: "删除全部入站(及其专属客户端)?此操作不可撤销。",
++    all: "★ 全部协议",
++    allDesc: "一次性创建全部 {n} 个协议,共用一个客户端(一个身份、所有协议)。端口自动分配。建完弹出含全部链接的二维码。",
++    vlessReality: "VLESS + Reality (Vision)",
++    vlessRealityDesc: "推荐。无需证书——通过 Reality 借用真实网站的 TLS。一键建好入站、Reality 密钥对和首个客户端。",
++    shadowsocks: "Shadowsocks 2022",
++    shadowsocksDesc: "Shadowsocks 2022 (blake3-aes-256-gcm)。无需证书,简单稳定。",
++    hysteria2: "Hysteria2(自签证书)",
++    hysteria2Desc: "Hysteria2(基于 QUIC),自动生成自签证书,弱网/高延迟表现好;已自动让客户端信任自签证书(insecure)。",
++    tuic: "TUIC(自签证书)",
++    tuicDesc: "TUIC v5(基于 QUIC),自动自签证书,移动/弱网下快;已自动让客户端信任证书(insecure)。",
++    trojan: "Trojan(自签证书)",
++    trojanDesc: "Trojan over TLS,自动自签证书,客户端支持广泛;已自动让客户端信任证书(insecure)。",
++    vmess: "VMess(自签证书)",
++    vmessDesc: "VMess over TLS,自动自签证书,客户端兼容性最好;已自动让客户端信任证书(insecure)。",
++    anytls: "AnyTLS(自签证书)",
++    anytlsDesc: "AnyTLS,自动自签证书,较新协议需较新客户端;已自动让客户端信任证书(insecure)。",
++    success: "模板创建成功",
++    failName: "入站标签或客户端名称已存在,请重试",
++  },
++  relay: {
++    btn: "添加中转",
++    title: "添加中转",
++    desc: "把某个入站的流量,经落地节点转发出去。粘贴落地节点的分享链接,再选哪些入站走这个中转。",
++    link: "落地节点分享链接",
++    linkHint: "vless:// vmess:// trojan:// ss:// hysteria2:// tuic:// … 或 socks5  IP:端口:用户:密码",
++    name: "中转名称(可选)",
++    entry: "入口入站",
++    entryHint: "只有选中的入站(节点)会经此落地转发;未选中的保持原样直连。",
++    create: "创建中转",
++    convertFail: "无法解析分享链接",
++    success: "中转已创建",
++    successButTest: "中转已创建,但落地测试未通过——请检查链接,或到出站页重测",
++    testOk: "落地连通",
++    testFail: "落地测试失败",
++    empty: "还没有中转。点「添加中转」创建一个。",
++    delConfirm: "删除该中转(它的路由规则 + 落地出站)?",
++    clearAllConfirm: "删除全部中转(路由规则 + 落地出站)?此操作不可撤销。",
++  },
++  exportLinks: {
++    btn: "导出",
++    title: "导出链接",
++    desc: "所有客户端的分享链接,每行一条。v2rayN:服务器 → 从剪贴板导入批量URL(Ctrl+V)。",
++    copy: "复制全部",
++    empty: "没有可导出的链接",
++    plain: "明文",
++    base64: "Base64",
++    base64Hint: "Base64(订阅内容格式)——给只认整包编码的工具用。",
++    subTab: "订阅",
++    linksTab: "全部链接",
++    subDesc: "把订阅链接添加到客户端(v2rayN / 小火箭)一次,它会拉取该客户端的全部协议并自动更新。",
++  },
+   error: {
+     dplData: "重复数据",
+     core: "Sing-Box 错误",
+@@ -36,10 +96,21 @@ export default {
+     dark: "深色",
+     system: "跟随系统",
+   },
++  skin: {
++    title: "外观",
++    aurora: "极光",
++    mesh: "流光网格",
++    deepsea: "深海",
++    sunrise: "晨曦",
++    cyber: "赛博霓虹",
++    mint: "薄荷青",
++  },
+   pages: {
+     login: "登录",
+     home: "主页",
+     inbounds: "入站管理",
++    relay: "中转管理",
++    servers: "服务器管理",
+     outbounds: "出站管理",
+     services: "服务管理",
+     endpoints: "节点管理",
+@@ -115,6 +186,32 @@ export default {
+     headers: "标头",
+     key: "键",
+     value: "值",
++    server: "服务器",
++  },
++  server: {
++    add: "添加服务器",
++    name: "名称",
++    url: "面板地址",
++    urlHint: "完整面板地址,如 http://1.2.3.4:2095/path/",
++    username: "用户名",
++    password: "密码",
++    token: "API 令牌",
++    tokenHint: "远程 APIv2 令牌,用于中央管理——在那台服务器上生成(它必须是本 s-ui 改版)。",
++    local: "本机",
++    deployTo: "部署到",
++    manage: "管理",
++    managing: "正在管理",
++    test: "测试",
++    testing: "测试中…",
++    online: "在线",
++    offline: "离线",
++    wipeNodes: "同时清空该服务器上的全部节点(不可恢复)",
++    remark: "备注",
++    open: "打开",
++    openAll: "全部打开",
++    copyPw: "复制密码",
++    pwCopied: "面板已打开,密码已复制,粘贴即可登录",
++    empty: "还没有服务器。把你的其他面板加进来,一键打开。",
+   },
+   actions: {
+     action: "操作",
+@@ -136,6 +233,9 @@ export default {
+     disable: "禁用",
+     close: "关闭",
+     restartApp: "重启面板",
++    updatePanel: "更新到",
++    updateConfirm: "更新会下载最新版本并重启面板,大约 1-2 分钟。期间订阅和节点不受影响。确定继续吗?",
++    updateStarted: "更新已开始,面板会自行重启。约 1-2 分钟后手动刷新页面即可。",
+     restartSb: "重启 Singbox",
+   },
+   login: {
+@@ -147,6 +247,9 @@ export default {
+   },
+   menu: {
+     logout: "退出登录",
++    site: "站长博客",
++    youtube: "YouTube 频道",
++    vps: "机器推荐",
+   },
+   admin: {
+     changeCred: "更改凭据",
+diff --git a/src/main.ts b/src/main.ts
+index 9af2edb..91161ec 100644
+--- a/src/main.ts
++++ b/src/main.ts
+@@ -19,6 +19,10 @@ import store from './store'
+ // Plugins
+ import { registerPlugins } from '@/plugins'
+ 
++// Gradient skins
++import '@/styles/skins.css'
++import { savedSkin, applySkinAttr } from '@/plugins/skins'
++
+ // Locale
+ import { i18n } from '@/locales'
+ import Vue3PersianDatetimePicker from 'vue3-persian-datetime-picker'
+@@ -41,6 +45,9 @@ const notivue = createNotivue({
+ 
+ const loading = ref(false)
+ 
++// Paint the saved gradient skin onto <html> before the app mounts.
++applySkinAttr(savedSkin().id)
++
+ const app = createApp(App)
+ app.provide('loading', loading)
+ 
+diff --git a/src/plugins/httputil.ts b/src/plugins/httputil.ts
+index a823c1c..e02c3f2 100644
+--- a/src/plugins/httputil.ts
++++ b/src/plugins/httputil.ts
+@@ -60,11 +60,24 @@ function isMsg(obj: any): obj is Msg {
+   return Object.hasOwn(obj,'success') && Object.hasOwn(obj,'msg') && Object.hasOwn(obj, 'obj')
+ }
+   
++// Currently managed remote server id ('' = this local panel). When set, API
++// calls carry X-Remote-Server so the backend forwards them to that server's
++// APIv2 (the central-management proxy).
++let currentRemote = ''
++export function setRemoteServer(id: string | number | null) {
++  currentRemote = id ? String(id) : ''
++}
++export function getRemoteServer(): string {
++  return currentRemote
++}
++
+ const HttpUtils = {
+   async get(url: string, data: object = {}, options: any[] = []): Promise<Msg> {
+     let msg: Msg
+     try {
+-        const resp = await api.get(url, { params: data, ...options })
++        const config: any = { params: data, ...options }
++        if (currentRemote) config.headers = { ...(config.headers || {}), 'X-Remote-Server': currentRemote }
++        const resp = await api.get(url, config)
+         msg = _respToMsg(resp)
+     } catch (e: any) {
+         msg = { success: false, msg: e.toString(), obj: null }
+@@ -75,7 +88,9 @@ const HttpUtils = {
+   async post(url: string, data: object | null, options: any = undefined): Promise<Msg> {
+     let msg: Msg
+     try {
+-        const resp = await api.post(url, data, options)
++        const config: any = { ...(options || {}) }
++        if (currentRemote) config.headers = { ...(config.headers || {}), 'X-Remote-Server': currentRemote }
++        const resp = await api.post(url, data, config)
+         msg = _respToMsg(resp)
+     } catch (e: any) {
+         msg = { success: false, msg: e.toString(), obj: null }
+diff --git a/src/plugins/skins.ts b/src/plugins/skins.ts
+new file mode 100644
+index 0000000..2d2f1a1
+--- /dev/null
++++ b/src/plugins/skins.ts
+@@ -0,0 +1,34 @@
++/**
++ * 6 gradient "skins". Each bundles a background gradient with the matching
++ * Vuetify base theme (light/dark) so component colours and contrast stay
++ * correct. The gradient + glass CSS lives in styles/skins.css, keyed off the
++ * <html data-skin="..."> attribute this module sets.
++ */
++export type SkinId = 'aurora' | 'mesh' | 'deepsea' | 'sunrise' | 'cyber' | 'mint'
++
++export interface Skin {
++  id: SkinId
++  base: 'light' | 'dark'
++  swatch: string // small gradient used as the menu preview chip
++}
++
++export const SKINS: Skin[] = [
++  { id: 'aurora', base: 'dark', swatch: 'linear-gradient(135deg,#302b63,#a855f7)' },
++  { id: 'mesh', base: 'light', swatch: 'linear-gradient(135deg,#c2e9fb,#fbc2eb)' },
++  { id: 'deepsea', base: 'dark', swatch: 'linear-gradient(135deg,#0e3a5f,#38bdf8)' },
++  { id: 'sunrise', base: 'light', swatch: 'linear-gradient(135deg,#ffaa96,#b4a0ff)' },
++  { id: 'cyber', base: 'dark', swatch: 'linear-gradient(135deg,#ec4899,#22d3ee)' },
++  { id: 'mint', base: 'light', swatch: 'linear-gradient(135deg,#a7f3d0,#bae6fd)' },
++]
++
++export const DEFAULT_SKIN: SkinId = 'aurora'
++
++export function savedSkin(): Skin {
++  const id = localStorage.getItem('skin') as SkinId | null
++  return SKINS.find((s) => s.id === id) ?? SKINS[0]
++}
++
++/** Reflect the chosen skin onto <html> so styles/skins.css picks its gradient. */
++export function applySkinAttr(id: SkinId): void {
++  document.documentElement.setAttribute('data-skin', id)
++}
+diff --git a/src/plugins/vuetify.ts b/src/plugins/vuetify.ts
+index 68dda3b..23ff793 100644
+--- a/src/plugins/vuetify.ts
++++ b/src/plugins/vuetify.ts
+@@ -13,6 +13,7 @@ import { fa, en, vi, zhHans, zhHant, ru } from 'vuetify/locale'
+ 
+ // Composables
+ import { createVuetify } from 'vuetify'
++import { savedSkin } from './skins'
+ 
+ // https://vuetifyjs.com/en/introduction/why-vuetify/#feature-guides
+ export default createVuetify({
+@@ -32,7 +33,7 @@ export default createVuetify({
+     },
+   },
+   theme: {
+-    defaultTheme: localStorage.getItem('theme') ?? 'system',
++    defaultTheme: savedSkin().base,
+     themes: {
+       light: {
+         colors: {
+diff --git a/src/router/index.ts b/src/router/index.ts
+index a894f18..0249385 100644
+--- a/src/router/index.ts
++++ b/src/router/index.ts
+@@ -24,6 +24,16 @@ const routes = [
+         name: 'pages.inbounds',
+         component: () => import('@/views/Inbounds.vue'),
+       },
++      {
++        path: '/relay',
++        name: 'pages.relay',
++        component: () => import('@/views/Relay.vue'),
++      },
++      {
++        path: '/servers',
++        name: 'pages.servers',
++        component: () => import('@/views/Servers.vue'),
++      },
+       {
+         path: '/clients',
+         name: 'pages.clients',
+diff --git a/src/store/modules/data.ts b/src/store/modules/data.ts
+index f789f40..8f61c10 100644
+--- a/src/store/modules/data.ts
++++ b/src/store/modules/data.ts
+@@ -1,4 +1,4 @@
+-import HttpUtils from '@/plugins/httputil'
++import HttpUtils, { setRemoteServer } from '@/plugins/httputil'
+ import { defineStore } from 'pinia'
+ import { push } from 'notivue'
+ import { i18n } from '@/locales'
+@@ -19,9 +19,47 @@ const Data = defineStore('Data', {
+     endpoints: <any[]>[],
+     clients: <any>[],
+     tlsConfigs: <any[]>[],
++    servers: <any[]>[],
++    currentServer: localStorage.getItem('currentServer') ?? '',
+   }),
+   actions: {
++    // The server registry is always local (never proxied to a remote).
++    async loadServers() {
++      const msg = await HttpUtils.get('api/servers')
++      if (msg.success) {
++        this.servers = msg.obj?.servers ?? []
++        // If the server we're managing was removed, fall back to local.
++        if (this.currentServer && !this.servers.some((s: any) => String(s.id) === this.currentServer)) {
++          this.currentServer = ''
++          localStorage.setItem('currentServer', '')
++          setRemoteServer('')
++        }
++      }
++    },
++    // Switch which server the panel manages ('' = this local panel).
++    setCurrentServer(id: string) {
++      id = id ?? ''
++      this.currentServer = id
++      localStorage.setItem('currentServer', id)
++      setRemoteServer(id)
++      // Force a full reload of the newly selected server and drop stale data.
++      this.lastLoad = 0
++      this.config = {}
++      this.inbounds = []
++      this.outbounds = []
++      this.services = []
++      this.endpoints = []
++      this.clients = []
++      this.tlsConfigs = []
++      this.onlines = { inbound: [], outbound: [], user: [] }
++      this.loadData()
++    },
+     async loadData() {
++      // Resolve the registry FIRST (awaited): if the server we're "managing" was
++      // removed, loadServers() drops currentServer back to local, so the api/load
++      // below isn't proxied to a gone remote and 404'd on every poll tick.
++      await this.loadServers()
++      setRemoteServer(this.currentServer)
+       const msg = await HttpUtils.get('api/load', this.lastLoad >0 ? {lu: this.lastLoad} : {} )
+       if(msg.success) {
+         this.onlines = msg.obj.onlines
+@@ -32,10 +70,15 @@ const Data = defineStore('Data', {
+             message: msg.obj.lastLog
+           })
+         }
+-        
++
+         if (msg.obj.config) {
+           this.setNewData(msg.obj)
+         }
++      } else if (this.currentServer && !/cancel/i.test(msg.msg)) {
++        // The remote we're managing is unreachable/gone (a real error, not a
++        // duplicate-request cancel). Stop the interval from looping 404s forever
++        // and fall back to the local panel.
++        this.setCurrentServer('')
+       }
+     },
+     setNewData(data: any) {
+@@ -49,6 +92,7 @@ const Data = defineStore('Data', {
+       if (Object.hasOwn(data, 'services')) this.services = data.services ?? []
+       if (Object.hasOwn(data, 'endpoints')) this.endpoints = data.endpoints ?? []
+       if (Object.hasOwn(data, 'tls')) this.tlsConfigs = data.tls ?? []
++      if (Object.hasOwn(data, 'servers')) this.servers = data.servers ?? []
+     },
+     async loadInbounds(ids: number[]): Promise<Inbound[]> {
+       const options = ids.length > 0 ? {id: ids.join(",")} : {}
+diff --git a/src/styles/skins.css b/src/styles/skins.css
+new file mode 100644
+index 0000000..5c3115e
+--- /dev/null
++++ b/src/styles/skins.css
+@@ -0,0 +1,100 @@
++/**
++ * Gradient skins + glassmorphism, keyed by <html data-skin>.
++ * The base light/dark Vuetify theme (chosen per skin) handles text contrast;
++ * here we only paint the background gradient and frost the chrome / cards.
++ */
++
++/* ---- gradient base (fixed to the viewport so it doesn't scroll) ---- */
++.v-application {
++  background-attachment: fixed !important;
++  background-size: cover !important;
++}
++
++html[data-skin='aurora'] .v-application {
++  background:
++    radial-gradient(at 18% 18%, rgba(99, 102, 241, 0.45), transparent 50%),
++    radial-gradient(at 82% 6%, rgba(16, 185, 129, 0.30), transparent 50%),
++    radial-gradient(at 62% 96%, rgba(168, 85, 247, 0.45), transparent 50%),
++    linear-gradient(135deg, #0f0c29, #302b63 58%, #24243e) !important;
++}
++html[data-skin='deepsea'] .v-application {
++  background:
++    radial-gradient(at 80% 12%, rgba(56, 189, 248, 0.42), transparent 50%),
++    radial-gradient(at 15% 88%, rgba(45, 212, 191, 0.28), transparent 50%),
++    linear-gradient(160deg, #0b1f3a, #0e3a5f 55%, #0c5a82) !important;
++}
++html[data-skin='cyber'] .v-application {
++  background:
++    radial-gradient(at 14% 14%, rgba(236, 72, 153, 0.50), transparent 46%),
++    radial-gradient(at 86% 88%, rgba(34, 211, 238, 0.45), transparent 46%),
++    radial-gradient(at 90% 10%, rgba(124, 58, 237, 0.38), transparent 42%),
++    linear-gradient(135deg, #0a0a16, #140a26) !important;
++}
++html[data-skin='mesh'] .v-application {
++  background:
++    radial-gradient(at 0% 0%, #c2e9fb, transparent 46%),
++    radial-gradient(at 100% 0%, #fbc2eb, transparent 46%),
++    radial-gradient(at 100% 100%, #a6c0fe, transparent 46%),
++    radial-gradient(at 0% 100%, #d9fcc0, transparent 46%),
++    #f6f7ff !important;
++}
++html[data-skin='sunrise'] .v-application {
++  background:
++    radial-gradient(at 12% 12%, rgba(255, 170, 150, 0.70), transparent 55%),
++    radial-gradient(at 88% 18%, rgba(255, 150, 205, 0.55), transparent 55%),
++    radial-gradient(at 50% 100%, rgba(180, 160, 255, 0.60), transparent 55%),
++    linear-gradient(135deg, #fdeee6, #f3e8ff) !important;
++}
++html[data-skin='mint'] .v-application {
++  background:
++    radial-gradient(at 10% 15%, rgba(167, 243, 208, 0.75), transparent 55%),
++    radial-gradient(at 92% 20%, rgba(186, 230, 253, 0.70), transparent 55%),
++    radial-gradient(at 60% 100%, rgba(221, 214, 254, 0.55), transparent 55%),
++    linear-gradient(135deg, #e6fbf2, #e3f4fd) !important;
++}
++
++/* ---- let the gradient show through the frame ---- */
++.v-application__wrap {
++  background: transparent !important;
++}
++.v-main {
++  background: transparent !important;
++}
++
++/* ---- frosted chrome (drawer + app bar) ---- */
++.v-navigation-drawer,
++.v-app-bar.v-toolbar {
++  backdrop-filter: blur(14px);
++  -webkit-backdrop-filter: blur(14px);
++}
++/* App bar sits at the top edge and never covers content, so it can stay a light
++   frost. */
++.v-theme--dark .v-app-bar.v-toolbar {
++  background: rgba(255, 255, 255, 0.06) !important;
++}
++.v-theme--light .v-app-bar.v-toolbar {
++  background: rgba(255, 255, 255, 0.40) !important;
++}
++/* The rail drawer expands on hover as a flyover ON TOP of the content, so a
++   see-through drawer bleeds the cards underneath (menu/content overlap). Paint
++   it with the skin's own surface colour, near-opaque, so the flyout is clean. */
++.v-navigation-drawer {
++  background: rgba(var(--v-theme-surface), 0.92) !important;
++}
++
++/* ---- frosted content cards ----
++   Dialogs are teleported outside .v-main, so they keep their solid surface and
++   stay readable. No !important here: colour utility classes (bg-primary, etc.)
++   keep their solid fill, so the "managing" highlight card is untouched. */
++.v-main .v-card {
++  backdrop-filter: blur(16px);
++  -webkit-backdrop-filter: blur(16px);
++}
++.v-theme--dark .v-main .v-card {
++  background: rgba(255, 255, 255, 0.07);
++  border: 1px solid rgba(255, 255, 255, 0.14);
++}
++.v-theme--light .v-main .v-card {
++  background: rgba(255, 255, 255, 0.55);
++  border: 1px solid rgba(255, 255, 255, 0.75);
++}
+diff --git a/src/views/Inbounds.vue b/src/views/Inbounds.vue
+index d55265b..0dba2b6 100644
+--- a/src/views/Inbounds.vue
++++ b/src/views/Inbounds.vue
+@@ -14,9 +14,56 @@
+     :tag="stats.tag"
+     @close="closeStats"
+   />
++  <QuickTemplate
++    v-model="templateModal"
++    :visible="templateModal"
++    @close="closeTemplate"
++  />
++  <ExportLinks
++    v-model="exportModal"
++    :visible="exportModal"
++    @close="exportModal = false"
++  />
++  <QrCode
++    v-model="qrcode.visible"
++    :visible="qrcode.visible"
++    :id="qrcode.id"
++    @close="qrcode.visible = false"
++  />
++  <v-dialog v-model="clearConfirm" width="380">
++    <v-card class="rounded-lg" :title="$t('quickTemplate.clearAll')">
++      <v-divider></v-divider>
++      <v-card-text>{{ $t('quickTemplate.clearAllConfirm') }}</v-card-text>
++      <v-card-actions>
++        <v-spacer></v-spacer>
++        <v-btn color="success" variant="outlined" @click="clearConfirm = false">{{ $t('no') }}</v-btn>
++        <v-btn color="error" variant="tonal" :loading="clearLoading" @click="delAllInbounds">{{ $t('yes') }}</v-btn>
++      </v-card-actions>
++    </v-card>
++  </v-dialog>
++  <v-dialog v-model="picker.visible" width="320">
++    <v-card class="rounded-lg" :title="$t('pages.clients')">
++      <v-divider></v-divider>
++      <v-list density="compact" nav>
++        <v-list-item v-for="c in picker.clients" :key="c.id" link @click="pickClient(c.id)">
++          <template v-slot:prepend><v-icon icon="mdi-qrcode"></v-icon></template>
++          <v-list-item-title>{{ c.name }}</v-list-item-title>
++        </v-list-item>
++      </v-list>
++    </v-card>
++  </v-dialog>
+   <v-row>
+     <v-col cols="12" justify="center" align="center">
+       <v-btn color="primary" @click="showModal(0)">{{ $t('actions.add') }}</v-btn>
++      <v-btn color="primary" variant="tonal" class="ms-2" prepend-icon="mdi-flash" @click="templateModal = true">
++        {{ $t('quickTemplate.btn') }}
++      </v-btn>
++      <v-btn color="primary" variant="tonal" class="ms-2" prepend-icon="mdi-export-variant" @click="exportModal = true">
++        {{ $t('exportLinks.btn') }}
++      </v-btn>
++      <v-btn v-if="inbounds.length > 0" color="error" variant="tonal" class="ms-2" prepend-icon="mdi-delete-sweep" :loading="clearLoading" @click="clearConfirm = true">
++        {{ $t('quickTemplate.clearAll') }}
++      </v-btn>
+     </v-col>
+   </v-row>
+   <v-row>
+@@ -96,6 +143,10 @@
+             <v-icon />
+             <v-tooltip activator="parent" location="top" :text="$t('actions.clone')"></v-tooltip>
+           </v-btn>
++          <v-btn icon="mdi-qrcode" v-if="item.users && item.users.length > 0" @click="showInboundQr(item)">
++            <v-icon />
++            <v-tooltip activator="parent" location="top" :text="$t('client.links')"></v-tooltip>
++          </v-btn>
+           <v-btn icon="mdi-chart-line" @click="showStats(item.tag)" v-if="Data().enableTraffic">
+             <v-icon />
+             <v-tooltip activator="parent" location="top" :text="$t('stats.graphTitle')"></v-tooltip>
+@@ -109,6 +160,9 @@
+ <script lang="ts" setup>
+ import Data from '@/store/modules/data'
+ import InboundVue from '@/layouts/modals/Inbound.vue'
++import QuickTemplate from '@/layouts/modals/QuickTemplate.vue'
++import QrCode from '@/layouts/modals/QrCode.vue'
++import ExportLinks from '@/layouts/modals/ExportLinks.vue'
+ import Stats from '@/layouts/modals/Stats.vue'
+ import { Config } from '@/types/config'
+ import { computed, ref } from 'vue'
+@@ -140,6 +194,56 @@ const modal = ref({
+   id: 0,
+ })
+ 
++const templateModal = ref(false)
++const closeTemplate = () => {
++  templateModal.value = false
++}
++
++const exportModal = ref(false)
++
++const clearConfirm = ref(false)
++const clearLoading = ref(false)
++const delAllInbounds = async () => {
++  clearLoading.value = true
++  const tags = inbounds.value.map(i => i.tag)
++  for (const tag of tags) {
++    await Data().save("inbounds", "del", tag)
++  }
++  clearLoading.value = false
++  clearConfirm.value = false
++}
++
++const qrcode = ref({
++  visible: false,
++  id: 0,
++})
++
++// QR access straight from an inbound card. One client -> show its QR directly;
++// several -> let the user pick which one.
++const picker = ref({
++  visible: false,
++  clients: <any[]>[],
++})
++const clientsOf = (item: any): any[] => {
++  return Data().clients.filter((c: any) => Array.isArray(c.inbounds) && c.inbounds.includes(item.id))
++}
++const showInboundQr = (item: any) => {
++  const cls = clientsOf(item)
++  if (cls.length === 0) return
++  if (cls.length === 1) {
++    qrcode.value.id = cls[0].id
++    qrcode.value.visible = true
++    return
++  }
++  picker.value.clients = cls
++  picker.value.visible = true
++}
++const pickClient = (id: number) => {
++  picker.value.visible = false
++  qrcode.value.id = id
++  qrcode.value.visible = true
++}
++
+ let delOverlay = ref(new Array<boolean>)
+ 
+ const showModal = (id: number) => {
+diff --git a/src/views/Login.vue b/src/views/Login.vue
+index 9059cbf..a578934 100644
+--- a/src/views/Login.vue
++++ b/src/views/Login.vue
+@@ -1,4 +1,5 @@
+ <template>
++    <v-app>
+     <v-container class="fill-height" style="margin-top: 100px;">
+       <v-row justify="center" align="center">
+         <v-col cols="12" sm="8" md="4">
+@@ -22,46 +23,59 @@
+                   <v-menu>
+                     <template v-slot:activator="{ props }">
+                       <v-btn icon v-bind="props">
+-                        <v-icon>mdi-theme-light-dark</v-icon>
++                        <v-icon>mdi-palette</v-icon>
+                       </v-btn>
+                     </template>
+-                    <v-list>
++                    <v-list density="compact">
+                       <v-list-item
+-                        v-for="th in themes"
+-                        :key="th.value"
+-                        @click="changeTheme(th.value)"
+-                        :prepend-icon="th.icon"
+-                        :active="isActiveTheme(th.value)"
++                        v-for="sk in skins"
++                        :key="sk.id"
++                        @click="changeSkin(sk.id)"
++                        :active="currentSkin === sk.id"
+                       >
+-                        <v-list-item-title>{{ $t(`theme.${th.value}`) }}</v-list-item-title>
++                        <template v-slot:prepend>
++                          <span class="skin-swatch" :style="{ backgroundImage: sk.swatch }"></span>
++                        </template>
++                        <v-list-item-title>{{ $t(`skin.${sk.id}`) }}</v-list-item-title>
+                       </v-list-item>
+                     </v-list>
+                   </v-menu>
+                 </template>
+               </v-select>
++              <div class="text-center mt-3">
++                <a href="https://3yuedaohang.com" target="_blank" rel="noopener noreferrer"
++                  class="text-caption text-decoration-none">🌐 {{ $t('menu.site') }} · 3yuedaohang.com</a>
++                <br>
++                <a href="https://www.youtube.com/@zhanzhang3yue" target="_blank" rel="noopener noreferrer"
++                  class="text-caption text-decoration-none">📺 {{ $t('menu.youtube') }} · @zhanzhang3yue</a>
++                <br>
++                <a href="https://3yuedaohang.com/cn2/banwagong" target="_blank" rel="noopener noreferrer"
++                  class="text-caption text-decoration-none">🖥️ {{ $t('menu.vps') }}</a>
++              </div>
+             </v-card-text>
+           </v-card>
+         </v-col>
+       </v-row>
+     </v-container>
++    </v-app>
+   </template>
+-  
++
+ <script lang="ts" setup>
+ import { ref } from "vue"
+ import { useLocale,useTheme } from 'vuetify'
+ import { i18n, languages } from '@/locales'
+ import { useRouter } from 'vue-router'
+ import HttpUtil from '@/plugins/httputil'
++import { SKINS, savedSkin, applySkinAttr, type SkinId } from '@/plugins/skins'
+ 
+ 
+ const theme = useTheme()
+ const locale = useLocale()
+ 
+-const themes = [
+-  { value: 'light', icon: 'mdi-white-balance-sunny' },
+-  { value: 'dark', icon: 'mdi-moon-waning-crescent' },
+-  { value: 'system', icon: 'mdi-laptop' },
+-]
++// Same gradient-skin picker as the in-panel app bar, so the login screen shows
++// the chosen skin (default Aurora) and stays in sync with the rest of the UI.
++const skins = SKINS
++const currentSkin = ref<SkinId>(savedSkin().id)
+ 
+ const username = ref('')
+ const usernameRules = [
+@@ -99,13 +113,26 @@ const changeLocale = (l: any) => {
+   locale.current.value = l ?? 'en'
+   localStorage.setItem('locale', locale.current.value)
+ }
+-const changeTheme = (th: string) => {
+-  theme.change(th)
+-  localStorage.setItem('theme', th)
+-}
+-const isActiveTheme = (th: string) => {
+-  const current = localStorage.getItem('theme') ?? 'system'
+-  return current == th
++const changeSkin = (id: SkinId) => {
++  const sk = SKINS.find((s) => s.id === id)!
++  theme.change(sk.base)
++  applySkinAttr(id)
++  localStorage.setItem('skin', id)
++  currentSkin.value = id
+ }
+ </script>
+-  
+\ No newline at end of file
++
++<style>
++.v-overlay .v-list-item,
++.v-field__input {
++  direction: ltr;
++}
++.skin-swatch {
++  display: inline-block;
++  width: 22px;
++  height: 22px;
++  border-radius: 6px;
++  margin-inline-end: 10px;
++  border: 1px solid rgba(128, 128, 128, 0.45);
++}
++</style>
+diff --git a/src/views/Relay.vue b/src/views/Relay.vue
+new file mode 100644
+index 0000000..e5c9229
+--- /dev/null
++++ b/src/views/Relay.vue
+@@ -0,0 +1,212 @@
++<template>
++  <RelayWizard
++    v-model="wizardModal"
++    :visible="wizardModal"
++    @close="wizardModal = false"
++  />
++  <QrCode
++    v-model="qrcode.visible"
++    :visible="qrcode.visible"
++    :id="qrcode.id"
++    @close="qrcode.visible = false"
++  />
++  <v-dialog v-model="picker.visible" width="320">
++    <v-card class="rounded-lg" :title="$t('pages.clients')">
++      <v-divider></v-divider>
++      <v-list density="compact" nav>
++        <v-list-item v-for="c in picker.clients" :key="c.id" link @click="pickClient(c.id)">
++          <template v-slot:prepend><v-icon icon="mdi-qrcode"></v-icon></template>
++          <v-list-item-title>{{ c.name }}</v-list-item-title>
++        </v-list-item>
++      </v-list>
++    </v-card>
++  </v-dialog>
++  <ExportLinks
++    v-model="exportModal"
++    :visible="exportModal"
++    @close="exportModal = false"
++  />
++  <v-dialog v-model="clearConfirm" width="380">
++    <v-card class="rounded-lg" :title="$t('quickTemplate.clearAll')">
++      <v-divider></v-divider>
++      <v-card-text>{{ $t('relay.clearAllConfirm') }}</v-card-text>
++      <v-card-actions>
++        <v-spacer></v-spacer>
++        <v-btn color="success" variant="outlined" @click="clearConfirm = false">{{ $t('no') }}</v-btn>
++        <v-btn color="error" variant="tonal" :loading="clearLoading" @click="clearAllRelays">{{ $t('yes') }}</v-btn>
++      </v-card-actions>
++    </v-card>
++  </v-dialog>
++  <v-row justify="center" align="center">
++    <v-col cols="auto">
++      <v-btn color="primary" prepend-icon="mdi-transit-connection-variant" @click="wizardModal = true">{{ $t('relay.btn') }}</v-btn>
++    </v-col>
++    <v-col cols="auto">
++      <v-btn color="primary" variant="tonal" prepend-icon="mdi-export-variant" @click="exportModal = true">{{ $t('exportLinks.btn') }}</v-btn>
++    </v-col>
++    <v-col cols="auto" v-if="relays.length > 0">
++      <v-btn color="error" variant="tonal" prepend-icon="mdi-delete-sweep" :loading="clearLoading" @click="clearConfirm = true">{{ $t('quickTemplate.clearAll') }}</v-btn>
++    </v-col>
++  </v-row>
++  <v-row v-if="relays.length === 0">
++    <v-col cols="12" style="text-align: center; opacity: 0.6; margin-top: 30px;">{{ $t('relay.empty') }}</v-col>
++  </v-row>
++  <v-row>
++    <v-col cols="12" sm="6" md="4" lg="3" v-for="(r, index) in relays" :key="r.outbound">
++      <v-card rounded="xl" elevation="5" min-width="200" :title="r.outbound">
++        <v-card-subtitle style="margin-top: -15px;">{{ r.type }} · {{ r.server }}</v-card-subtitle>
++        <v-card-text>
++          <v-row>
++            <v-col cols="4">{{ $t('relay.entry') }}</v-col>
++            <v-col cols="8">
++              <v-chip v-for="t in r.inbounds" :key="t" size="x-small" label class="ma-1">{{ t }}</v-chip>
++            </v-col>
++          </v-row>
++          <v-row>
++            <v-col cols="4">{{ $t('out.delay') }}</v-col>
++            <v-col cols="8">
++              <v-progress-circular v-if="checkResults[r.outbound]?.loading" indeterminate size="20" />
++              <v-icon v-else icon="mdi-speedometer" @click="checkOutbound(r.outbound)">
++                <v-tooltip activator="parent" location="top" :text="$t('actions.test')"></v-tooltip>
++              </v-icon>
++              <v-chip v-if="checkResults[r.outbound] && !checkResults[r.outbound].loading && checkResults[r.outbound].success"
++                density="compact" size="small" color="success" variant="flat" class="ms-1">
++                {{ checkResults[r.outbound].data?.Delay + $t('date.ms') }}
++              </v-chip>
++              <v-icon v-else-if="checkResults[r.outbound] && !checkResults[r.outbound].loading"
++                size="small" color="error" icon="mdi-close-circle" class="ms-1" />
++            </v-col>
++          </v-row>
++        </v-card-text>
++        <v-divider></v-divider>
++        <v-card-actions style="padding: 0;">
++          <v-btn icon="mdi-qrcode" @click="showRelayQr(r)">
++            <v-icon />
++            <v-tooltip activator="parent" location="top" :text="$t('client.links')"></v-tooltip>
++          </v-btn>
++          <v-btn icon="mdi-file-remove" color="warning" @click="delOverlay[index] = true">
++            <v-icon />
++            <v-tooltip activator="parent" location="top" :text="$t('actions.del')"></v-tooltip>
++          </v-btn>
++          <v-overlay v-model="delOverlay[index]" contained class="align-center justify-center">
++            <v-card :title="$t('actions.del')" rounded="lg">
++              <v-divider></v-divider>
++              <v-card-text>{{ $t('relay.delConfirm') }}</v-card-text>
++              <v-card-actions>
++                <v-btn color="error" variant="outlined" :loading="delLoading" @click="delRelay(r, index)">{{ $t('yes') }}</v-btn>
++                <v-btn color="success" variant="outlined" @click="delOverlay[index] = false">{{ $t('no') }}</v-btn>
++              </v-card-actions>
++            </v-card>
++          </v-overlay>
++        </v-card-actions>
++      </v-card>
++    </v-col>
++  </v-row>
++</template>
++
++<script lang="ts" setup>
++import Data from '@/store/modules/data'
++import HttpUtils from '@/plugins/httputil'
++import RelayWizard from '@/layouts/modals/RelayWizard.vue'
++import QrCode from '@/layouts/modals/QrCode.vue'
++import ExportLinks from '@/layouts/modals/ExportLinks.vue'
++import { computed, ref } from 'vue'
++
++const wizardModal = ref(false)
++const exportModal = ref(false)
++const delOverlay = ref<boolean[]>([])
++const delLoading = ref(false)
++const clearConfirm = ref(false)
++const clearLoading = ref(false)
++const checkResults = ref<Record<string, any>>({})
++
++// QR for a relay = the QR of the clients on its entry inbound(s) — that's the
++// link end users actually connect with (the relay is transparent to them).
++const qrcode = ref({ visible: false, id: 0 })
++const picker = ref({ visible: false, clients: <any[]>[] })
++
++const clientsForRelay = (r: any): any[] => {
++  const entryIds = (Data().inbounds || []).filter((i: any) => r.inbounds.includes(i.tag)).map((i: any) => i.id)
++  return (Data().clients || []).filter((c: any) => Array.isArray(c.inbounds) && c.inbounds.some((id: number) => entryIds.includes(id)))
++}
++const showRelayQr = (r: any) => {
++  const cls = clientsForRelay(r)
++  if (cls.length === 0) return
++  if (cls.length === 1) {
++    qrcode.value.id = cls[0].id
++    qrcode.value.visible = true
++    return
++  }
++  picker.value.clients = cls
++  picker.value.visible = true
++}
++const pickClient = (id: number) => {
++  picker.value.visible = false
++  qrcode.value.id = id
++  qrcode.value.visible = true
++}
++
++// A "relay" = a route rule (action: route) whose outbound is a real outbound.
++const relays = computed((): any[] => {
++  const config: any = Data().config || {}
++  const rules: any[] = config.route?.rules || []
++  const obs: any[] = Data().outbounds || []
++  const result: any[] = []
++  rules.forEach((rule: any) => {
++    if (rule && rule.action === 'route' && rule.outbound && rule.inbound) {
++      const ob = obs.find((o: any) => o.tag === rule.outbound)
++      if (ob) {
++        result.push({
++          outbound: ob.tag,
++          type: ob.type,
++          server: ob.server ?? '-',
++          inbounds: Array.isArray(rule.inbound) ? rule.inbound : [rule.inbound],
++        })
++      }
++    }
++  })
++  return result
++})
++
++const checkOutbound = async (tag: string) => {
++  checkResults.value = { ...checkResults.value, [tag]: { loading: true, success: false } }
++  const msg = await HttpUtils.get('api/checkOutbound', { tag })
++  const success = msg.success && msg.obj?.OK
++  checkResults.value = { ...checkResults.value, [tag]: { loading: false, success, data: msg.obj ?? null } }
++}
++
++const delRelay = async (r: any, index: number) => {
++  delLoading.value = true
++  // 1) Remove the route rule(s) routing to this landing, save config (restart).
++  const config = JSON.parse(JSON.stringify(Data().config || {}))
++  if (config.route?.rules) {
++    config.route.rules = config.route.rules.filter(
++      (rule: any) => !(rule.action === 'route' && rule.outbound === r.outbound)
++    )
++  }
++  await Data().save('config', 'set', config)
++  // 2) Delete the landing outbound.
++  await Data().save('outbounds', 'del', r.outbound)
++  delLoading.value = false
++  delOverlay.value[index] = false
++}
++
++const clearAllRelays = async () => {
++  clearLoading.value = true
++  const tags = relays.value.map((r: any) => r.outbound)
++  // 1) Drop all relay route rules in one config save.
++  const config = JSON.parse(JSON.stringify(Data().config || {}))
++  if (config.route?.rules) {
++    config.route.rules = config.route.rules.filter(
++      (rule: any) => !(rule.action === 'route' && tags.includes(rule.outbound))
++    )
++  }
++  await Data().save('config', 'set', config)
++  // 2) Delete all the landing outbounds.
++  for (const tag of tags) {
++    await Data().save('outbounds', 'del', tag)
++  }
++  clearLoading.value = false
++  clearConfirm.value = false
++}
++</script>
+diff --git a/src/views/Servers.vue b/src/views/Servers.vue
+new file mode 100644
+index 0000000..9fcfddc
+--- /dev/null
++++ b/src/views/Servers.vue
+@@ -0,0 +1,152 @@
++<template>
++  <ServerEdit
++    v-model="editModal.visible"
++    :visible="editModal.visible"
++    :server="editModal.server"
++    @close="closeEdit"
++  />
++  <v-row justify="center" align="center">
++    <v-col cols="auto">
++      <v-btn color="primary" prepend-icon="mdi-server-plus" @click="showEdit(null)">{{ $t('server.add') }}</v-btn>
++    </v-col>
++  </v-row>
++  <v-row v-if="servers.length === 0">
++    <v-col cols="12" style="text-align: center; opacity: 0.6; margin-top: 30px;">{{ $t('server.empty') }}</v-col>
++  </v-row>
++  <v-row>
++    <v-col cols="12" sm="6" md="4" lg="3" v-for="(item, index) in servers" :key="item.id">
++      <v-card rounded="xl" elevation="5" min-width="200" :title="item.name"
++        :color="currentServer === String(item.id) ? 'primary' : undefined">
++        <v-card-subtitle style="margin-top: -15px; overflow-wrap: anywhere;">{{ item.url }}</v-card-subtitle>
++        <v-card-text>
++          <div style="margin-bottom: 6px;">
++            <v-chip v-if="st(item).state === 'testing'" size="small" color="grey" variant="tonal">
++              <v-progress-circular size="12" width="2" indeterminate class="mr-1" />{{ $t('server.testing') }}
++            </v-chip>
++            <v-chip v-else-if="st(item).state === 'online'" size="small" color="success" variant="tonal" prepend-icon="mdi-check-circle">
++              {{ st(item).latency }} ms
++            </v-chip>
++            <v-chip v-else-if="st(item).state === 'offline'" size="small" color="error" variant="tonal" prepend-icon="mdi-alert-circle">
++              {{ $t('server.offline') }}
++            </v-chip>
++          </div>
++          <div v-if="currentServer === String(item.id)" style="font-weight: bold;">● {{ $t('server.managing') }}</div>
++          <div v-if="item.remark" style="opacity: 0.7;">{{ item.remark }}</div>
++        </v-card-text>
++        <v-divider></v-divider>
++        <v-card-actions style="padding: 0;">
++          <v-btn icon="mdi-lan-pending" @click.stop="testServer(item)">
++            <v-icon />
++            <v-tooltip activator="parent" location="top" :text="$t('server.test')"></v-tooltip>
++          </v-btn>
++          <v-btn icon="mdi-cog" color="primary" @click.stop="manage(item)">
++            <v-icon />
++            <v-tooltip activator="parent" location="top" :text="$t('server.manage')"></v-tooltip>
++          </v-btn>
++          <v-btn icon="mdi-file-edit" @click.stop="showEdit(item)">
++            <v-icon />
++            <v-tooltip activator="parent" location="top" :text="$t('actions.edit')"></v-tooltip>
++          </v-btn>
++          <v-btn icon="mdi-file-remove" color="warning" @click.stop="delOverlay[index] = true">
++            <v-icon />
++            <v-tooltip activator="parent" location="top" :text="$t('actions.del')"></v-tooltip>
++          </v-btn>
++          <v-overlay v-model="delOverlay[index]" contained class="align-center justify-center">
++            <v-card :title="$t('actions.del')" rounded="lg">
++              <v-divider></v-divider>
++              <v-card-text>
++                {{ $t('confirm') }}
++                <v-checkbox v-model="wipeNodes[index]" :label="$t('server.wipeNodes')" density="compact" hide-details color="error" class="mt-2" />
++              </v-card-text>
++              <v-card-actions>
++                <v-btn color="error" variant="outlined" @click.stop="delServer(item, index)">{{ $t('yes') }}</v-btn>
++                <v-btn color="success" variant="outlined" @click.stop="delOverlay[index] = false">{{ $t('no') }}</v-btn>
++              </v-card-actions>
++            </v-card>
++          </v-overlay>
++        </v-card-actions>
++      </v-card>
++    </v-col>
++  </v-row>
++</template>
++
++<script lang="ts" setup>
++import Data from '@/store/modules/data'
++import HttpUtils from '@/plugins/httputil'
++import api from '@/plugins/api'
++import ServerEdit from '@/layouts/modals/ServerEdit.vue'
++import { computed, ref, watch } from 'vue'
++import { useRouter } from 'vue-router'
++
++const router = useRouter()
++
++const servers = computed((): any[] => Data().servers ?? [])
++const currentServer = computed((): string => Data().currentServer)
++
++const editModal = ref<{ visible: boolean, server: any }>({ visible: false, server: null })
++const delOverlay = ref<boolean[]>([])
++const wipeNodes = ref<boolean[]>([])
++
++type ServerStatus = { state: 'idle' | 'testing' | 'online' | 'offline', latency?: number, error?: string }
++const statusMap = ref<Record<string, ServerStatus>>({})
++const st = (item: any): ServerStatus => statusMap.value[item.id] || { state: 'idle' }
++
++// Probe a server's reachability + token through the backend (it calls the
++// remote APIv2 and times the round-trip).
++const testServer = async (item: any) => {
++  statusMap.value = { ...statusMap.value, [item.id]: { state: 'testing' } }
++  const r = await HttpUtils.get('api/testServer', { id: item.id })
++  const o: any = r.obj || {}
++  statusMap.value = {
++    ...statusMap.value,
++    [item.id]: o.online
++      ? { state: 'online', latency: o.latency }
++      : { state: 'offline', error: o.error },
++  }
++}
++const testAll = () => servers.value.forEach(testServer)
++
++// Auto-test on load and whenever the list changes (e.g. after add/edit).
++watch(servers, () => testAll(), { immediate: true })
++
++const showEdit = (server: any) => {
++  editModal.value.server = server
++  editModal.value.visible = true
++}
++const closeEdit = () => {
++  editModal.value.visible = false
++}
++
++// Switch the panel to manage this server, then jump to its inbounds.
++const manage = (item: any) => {
++  Data().setCurrentServer(String(item.id))
++  router.push('/inbounds')
++}
++
++// Delete every inbound on a remote server, talking to it directly via the proxy
++// header so the local view isn't overwritten with the remote's data. Opt-in only.
++const wipeRemoteNodes = async (id: string) => {
++  const resp = await api.get('api/inbounds', { headers: { 'X-Remote-Server': id } })
++  const inbounds: any[] = resp.data?.obj?.inbounds ?? []
++  for (const ib of inbounds) {
++    await api.post('api/save',
++      { object: 'inbounds', action: 'del', data: JSON.stringify(ib.id) },
++      { headers: { 'X-Remote-Server': id } })
++  }
++}
++
++const delServer = async (item: any, index: number) => {
++  if (wipeNodes.value[index]) {
++    // If the server is unreachable we can't clear its nodes — drop the entry anyway.
++    try { await wipeRemoteNodes(String(item.id)) } catch { /* ignore */ }
++  }
++  const success = await Data().save('servers', 'del', item.id)
++  if (success) {
++    // If we just removed the server we were managing, fall back to the local
++    // panel so subsequent api/load calls aren't proxied to a gone remote.
++    if (String(item.id) === Data().currentServer) Data().setCurrentServer('')
++    delOverlay.value[index] = false
++    wipeNodes.value[index] = false
++  }
++}
++</script>
+diff --git a/src/views/Settings.vue b/src/views/Settings.vue
+index 16087d9..31db089 100644
+--- a/src/views/Settings.vue
++++ b/src/views/Settings.vue
+@@ -23,6 +23,11 @@
+           {{ $t('actions.restartApp') }}
+         </v-btn>
+       </v-col>
++      <v-col cols="auto" v-if="updateInfo?.updateAvailable">
++        <v-btn variant="outlined" color="success" @click="updatePanel" :loading="updating" :disabled="stateChange">
++          {{ $t('actions.updatePanel') }} {{ updateInfo.latestVersion }}
++        </v-btn>
++      </v-col>
+     </v-row>
+     <v-window v-model="tab">
+       <v-window-item value="t1">
+@@ -177,12 +182,31 @@ const settings = ref({
+   subClashExt: "",
+ })
+ 
++const updateInfo = ref<any>(null)
++const updating = ref(false)
++
+ onMounted(async () => {
+   loading.value = true
+   await loadData()
+   loading.value = false
++  // 版本检查放在最后、且不接管 loading:GitHub 不通的时候(被墙、限流)
++  // 不该把整个设置页卡住,查不到就当没有更新。
++  const msg = await HttpUtils.get('api/updateInfo')
++  if (msg.success) updateInfo.value = msg.obj
+ })
+ 
++const updatePanel = async () => {
++  if (!confirm(i18n.global.t('actions.updateConfirm'))) return
++  updating.value = true
++  const msg = await HttpUtils.post('api/updatePanel', {})
++  updating.value = false
++  if (msg.success) {
++    // 不自动跳转:更新要下载新二进制再重启,耗时不定,自动刷新多半会撞上
++    // 面板还没起来的空档,反而像是更新失败了。
++    push.success({ title: i18n.global.t('actions.updateStarted'), duration: 10000 })
++  }
++}
++
+ const loadData = async () => {
+   loading.value = true
+   const msg = await HttpUtils.get('api/settings')
