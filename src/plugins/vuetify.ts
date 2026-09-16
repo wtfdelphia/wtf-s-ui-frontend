@@ -13,6 +13,7 @@ import { fa, en, vi, zhHans, zhHant, ru } from 'vuetify/locale'
 
 // Composables
 import { createVuetify } from 'vuetify'
+import { savedSkin } from './skins'
 
 // https://vuetifyjs.com/en/introduction/why-vuetify/#feature-guides
 export default createVuetify({
@@ -32,7 +33,7 @@ export default createVuetify({
     },
   },
   theme: {
-    defaultTheme: localStorage.getItem('theme') ?? 'system',
+    defaultTheme: savedSkin().base,
     themes: {
       light: {
         colors: {

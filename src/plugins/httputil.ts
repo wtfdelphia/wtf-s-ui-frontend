@@ -97,11 +97,24 @@ function isMsg(obj: unknown): obj is Msg {
   return Object.hasOwn(obj as object,'success') && Object.hasOwn(obj as object,'msg') && Object.hasOwn(obj as object, 'obj')
 }
 
+// Currently managed remote server id ('' = this local panel). When set, API
+// calls carry X-Remote-Server so the backend forwards them to that server's
+// APIv2 (the central-management proxy).
+let currentRemote = ''
+export function setRemoteServer(id: string | number | null) {
+  currentRemote = id ? String(id) : ''
+}
+export function getRemoteServer(): string {
+  return currentRemote
+}
+
 const HttpUtils = {
   async get<T = unknown>(url: string, data: object = {}, options: object = {}): Promise<Msg<T>> {
     let msg: Msg<T>
     try {
-        const resp = await api.get(url, { params: data, ...options })
+        const config: AxiosRequestConfig = { params: data, ...options }
+        if (currentRemote) config.headers = { ...(config.headers || {}), 'X-Remote-Server': currentRemote }
+        const resp = await api.get(url, config)
         msg = _respToMsg<T>(resp)
     } catch (e: unknown) {
         const err = e as RequestError
@@ -118,7 +131,9 @@ const HttpUtils = {
   async post<T = unknown>(url: string, data: object | null, options: AxiosRequestConfig | undefined = undefined): Promise<Msg<T>> {
     let msg: Msg<T>
     try {
-        const resp = await api.post(url, data, options)
+        const config: AxiosRequestConfig = { ...(options || {}) }
+        if (currentRemote) config.headers = { ...(config.headers || {}), 'X-Remote-Server': currentRemote }
+        const resp = await api.post(url, data, config)
         msg = _respToMsg<T>(resp)
     } catch (e: unknown) {
         const err = e as RequestError

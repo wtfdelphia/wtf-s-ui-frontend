@@ -37,12 +37,8 @@
           fixed-tabs
           align-tabs="center"
         >
-          <v-tab value="sub">
-            {{ $t('setting.sub') }}
-          </v-tab>
-          <v-tab value="link">
-            {{ $t('client.links') }}
-          </v-tab>
+          <v-tab value="link">{{ $t('client.links') }}</v-tab>
+          <v-tab value="sub">{{ $t('setting.sub') }}</v-tab>
         </v-tabs>
         <v-window
           v-model="tab"
@@ -137,7 +133,7 @@ export default {
   emits: ['close'],
   data() {
     return {
-      tab: "sub",
+      tab: "link",
       client: <Client>{},
       loading: false,
     }
@@ -162,7 +158,7 @@ export default {
   watch: {
     visible(v) {
       if (v) {
-        this.tab = "sub"
+        this.tab = "link"
         this.load()
       }
     },

@@ -19,6 +19,10 @@ import store from './store'
 // Plugins
 import { registerPlugins } from '@/plugins'
 
+// Gradient skins
+import '@/styles/skins.css'
+import { savedSkin, applySkinAttr } from '@/plugins/skins'
+
 // Locale
 import { i18n } from '@/locales'
 import Vue3PersianDatetimePicker from 'vue3-persian-datetime-picker'
@@ -40,6 +44,9 @@ const notivue = createNotivue({
 })
 
 const loading = ref(false)
+
+// Paint the saved gradient skin onto <html> before the app mounts.
+applySkinAttr(savedSkin().id)
 
 const app = createApp(App)
 app.provide('loading', loading)

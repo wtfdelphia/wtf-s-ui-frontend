@@ -46,6 +46,18 @@
             {{ $t('actions.restartApp') }}
           </v-btn>
         </v-col>
+        <!-- Self-update (qs44): only appears when the backend reports a newer release. -->
+        <v-col cols="auto" v-if="updateInfo?.updateAvailable">
+          <v-btn
+            variant="outlined"
+            color="success"
+            :loading="updating"
+            :disabled="stateChange"
+            @click="updatePanel"
+          >
+            {{ $t('actions.updatePanel') }} {{ updateInfo.latestVersion }}
+          </v-btn>
+        </v-col>
         <!-- The core cannot be held down any other way: a plain stop is undone by
            the watchdog within five seconds. -->
         <v-col cols="auto">
@@ -407,11 +419,32 @@ const settings = ref({
 // The panel settings, exactly as the block above spells them out.
 type PanelSettings = typeof settings.value
 
+// Self-update state (qs44): updateInfo is polled once on mount; the button
+// only shows when the backend reports a newer release.
+const updateInfo = ref<{ updateAvailable?: boolean; latestVersion?: string } | null>(null)
+const updating = ref(false)
+
 onMounted(async () => {
   loading.value = true
   await loadData()
   loading.value = false
+  // 版本检查放在最后、且不接管 loading:GitHub 不通的时候(被墙、限流)
+  // 不该把整个设置页卡住,查不到就当没有更新。
+  const msg = await HttpUtils.get<{ updateAvailable?: boolean; latestVersion?: string }>('api/updateInfo')
+  if (msg.success) updateInfo.value = msg.obj
 })
+
+const updatePanel = async () => {
+  if (!confirm(i18n.global.t('actions.updateConfirm'))) return
+  updating.value = true
+  const msg = await HttpUtils.post('api/updatePanel', {})
+  updating.value = false
+  if (msg.success) {
+    // 不自动跳转:更新要下载新二进制再重启,耗时不定,自动刷新多半会撞上
+    // 面板还没起来的空档,反而像是更新失败了。
+    push.success({ title: i18n.global.t('actions.updateStarted'), duration: 10000 })
+  }
+}
 
 const loadData = async () => {
   loading.value = true

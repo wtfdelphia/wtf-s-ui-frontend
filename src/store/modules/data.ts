@@ -1,4 +1,4 @@
-import HttpUtils from '@/plugins/httputil'
+import HttpUtils, { setRemoteServer } from '@/plugins/httputil'
 import { defineStore } from 'pinia'
 import { push } from 'notivue'
 import { i18n } from '@/locales'
@@ -8,6 +8,7 @@ import { Outbound } from '@/types/outbounds'
 import { Srv } from '@/types/services'
 import { Endpoint } from '@/types/endpoints'
 import { Config } from '@/types/config'
+import { Server } from '@/types/servers'
 import { tls } from '@/types/tls'
 
 // Online tags, by kind. The backend marks each list `omitempty`, so a poll
@@ -37,6 +38,7 @@ export interface LoadedData {
   services?: Srv[]
   endpoints?: Endpoint[]
   tls?: tls[]
+  servers?: Server[]
 }
 
 // The duplicate-tag check works on any of the four lists without caring which
@@ -61,9 +63,47 @@ const Data = defineStore('Data', {
     endpoints: <Endpoint[]>[],
     clients: <Client[]>[],
     tlsConfigs: <tls[]>[],
+    servers: <Server[]>[],
+    currentServer: localStorage.getItem('currentServer') ?? '',
   }),
   actions: {
+    // The server registry is always local (never proxied to a remote).
+    async loadServers() {
+      const msg = await HttpUtils.get<{ servers: Server[] }>('api/servers')
+      if (msg.success) {
+        this.servers = msg.obj?.servers ?? []
+        // If the server we're managing was removed, fall back to local.
+        if (this.currentServer && !this.servers.some((s: any) => String(s.id) === this.currentServer)) {
+          this.currentServer = ''
+          localStorage.setItem('currentServer', '')
+          setRemoteServer('')
+        }
+      }
+    },
+    // Switch which server the panel manages ('' = this local panel).
+    setCurrentServer(id: string) {
+      id = id ?? ''
+      this.currentServer = id
+      localStorage.setItem('currentServer', id)
+      setRemoteServer(id)
+      // Force a full reload of the newly selected server and drop stale data.
+      this.lastLoad = 0
+      this.config = <Config>{}
+      this.inbounds = []
+      this.outbounds = []
+      this.services = []
+      this.endpoints = []
+      this.clients = []
+      this.tlsConfigs = []
+      this.onlines = { inbound: [], outbound: [], user: [] }
+      this.loadData()
+    },
     async loadData() {
+      // Resolve the registry FIRST (awaited): if the server we're "managing" was
+      // removed, loadServers() drops currentServer back to local, so the api/load
+      // below isn't proxied to a gone remote and 404'd on every poll tick.
+      await this.loadServers()
+      setRemoteServer(this.currentServer)
       const msg = await HttpUtils.get<LoadedData>('api/load', this.lastLoad >0 ? {lu: this.lastLoad} : {} )
       if(msg.success) {
         if (msg.obj.onlines) this.onlines = msg.obj.onlines
@@ -75,10 +115,15 @@ const Data = defineStore('Data', {
             message: msg.obj.lastLog
           })
         }
-        
+
         if (msg.obj.config) {
           this.setNewData(msg.obj)
         }
+      } else if (this.currentServer && !/cancel/i.test(msg.msg)) {
+        // The remote we're managing is unreachable/gone (a real error, not a
+        // duplicate-request cancel). Stop the interval from looping 404s forever
+        // and fall back to the local panel.
+        this.setCurrentServer('')
       }
     },
     setNewData(data: LoadedData) {
@@ -96,6 +141,7 @@ const Data = defineStore('Data', {
       if (Object.hasOwn(data, 'services')) this.services = data.services ?? []
       if (Object.hasOwn(data, 'endpoints')) this.endpoints = data.endpoints ?? []
       if (Object.hasOwn(data, 'tls')) this.tlsConfigs = data.tls ?? []
+      if (Object.hasOwn(data, 'servers')) this.servers = data.servers ?? []
     },
     async loadInbounds(ids: number[]): Promise<Inbound[]> {
       const options = ids.length > 0 ? {id: ids.join(",")} : {}

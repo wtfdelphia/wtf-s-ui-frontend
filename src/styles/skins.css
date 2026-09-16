@@ -1,0 +1,100 @@
+/**
+ * Gradient skins + glassmorphism, keyed by <html data-skin>.
+ * The base light/dark Vuetify theme (chosen per skin) handles text contrast;
+ * here we only paint the background gradient and frost the chrome / cards.
+ */
+
+/* ---- gradient base (fixed to the viewport so it doesn't scroll) ---- */
+.v-application {
+  background-attachment: fixed !important;
+  background-size: cover !important;
+}
+
+html[data-skin='aurora'] .v-application {
+  background:
+    radial-gradient(at 18% 18%, rgba(99, 102, 241, 0.45), transparent 50%),
+    radial-gradient(at 82% 6%, rgba(16, 185, 129, 0.30), transparent 50%),
+    radial-gradient(at 62% 96%, rgba(168, 85, 247, 0.45), transparent 50%),
+    linear-gradient(135deg, #0f0c29, #302b63 58%, #24243e) !important;
+}
+html[data-skin='deepsea'] .v-application {
+  background:
+    radial-gradient(at 80% 12%, rgba(56, 189, 248, 0.42), transparent 50%),
+    radial-gradient(at 15% 88%, rgba(45, 212, 191, 0.28), transparent 50%),
+    linear-gradient(160deg, #0b1f3a, #0e3a5f 55%, #0c5a82) !important;
+}
+html[data-skin='cyber'] .v-application {
+  background:
+    radial-gradient(at 14% 14%, rgba(236, 72, 153, 0.50), transparent 46%),
+    radial-gradient(at 86% 88%, rgba(34, 211, 238, 0.45), transparent 46%),
+    radial-gradient(at 90% 10%, rgba(124, 58, 237, 0.38), transparent 42%),
+    linear-gradient(135deg, #0a0a16, #140a26) !important;
+}
+html[data-skin='mesh'] .v-application {
+  background:
+    radial-gradient(at 0% 0%, #c2e9fb, transparent 46%),
+    radial-gradient(at 100% 0%, #fbc2eb, transparent 46%),
+    radial-gradient(at 100% 100%, #a6c0fe, transparent 46%),
+    radial-gradient(at 0% 100%, #d9fcc0, transparent 46%),
+    #f6f7ff !important;
+}
+html[data-skin='sunrise'] .v-application {
+  background:
+    radial-gradient(at 12% 12%, rgba(255, 170, 150, 0.70), transparent 55%),
+    radial-gradient(at 88% 18%, rgba(255, 150, 205, 0.55), transparent 55%),
+    radial-gradient(at 50% 100%, rgba(180, 160, 255, 0.60), transparent 55%),
+    linear-gradient(135deg, #fdeee6, #f3e8ff) !important;
+}
+html[data-skin='mint'] .v-application {
+  background:
+    radial-gradient(at 10% 15%, rgba(167, 243, 208, 0.75), transparent 55%),
+    radial-gradient(at 92% 20%, rgba(186, 230, 253, 0.70), transparent 55%),
+    radial-gradient(at 60% 100%, rgba(221, 214, 254, 0.55), transparent 55%),
+    linear-gradient(135deg, #e6fbf2, #e3f4fd) !important;
+}
+
+/* ---- let the gradient show through the frame ---- */
+.v-application__wrap {
+  background: transparent !important;
+}
+.v-main {
+  background: transparent !important;
+}
+
+/* ---- frosted chrome (drawer + app bar) ---- */
+.v-navigation-drawer,
+.v-app-bar.v-toolbar {
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+/* App bar sits at the top edge and never covers content, so it can stay a light
+   frost. */
+.v-theme--dark .v-app-bar.v-toolbar {
+  background: rgba(255, 255, 255, 0.06) !important;
+}
+.v-theme--light .v-app-bar.v-toolbar {
+  background: rgba(255, 255, 255, 0.40) !important;
+}
+/* The rail drawer expands on hover as a flyover ON TOP of the content, so a
+   see-through drawer bleeds the cards underneath (menu/content overlap). Paint
+   it with the skin's own surface colour, near-opaque, so the flyout is clean. */
+.v-navigation-drawer {
+  background: rgba(var(--v-theme-surface), 0.92) !important;
+}
+
+/* ---- frosted content cards ----
+   Dialogs are teleported outside .v-main, so they keep their solid surface and
+   stay readable. No !important here: colour utility classes (bg-primary, etc.)
+   keep their solid fill, so the "managing" highlight card is untouched. */
+.v-main .v-card {
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+.v-theme--dark .v-main .v-card {
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+.v-theme--light .v-main .v-card {
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.75);
+}

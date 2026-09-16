@@ -26,6 +26,16 @@ const routes = [
         component: () => import('@/views/Inbounds.vue'),
       },
       {
+        path: '/relay',
+        name: 'pages.relay',
+        component: () => import('@/views/Relay.vue'),
+      },
+      {
+        path: '/servers',
+        name: 'pages.servers',
+        component: () => import('@/views/Servers.vue'),
+      },
+      {
         path: '/clients',
         name: 'pages.clients',
         component: () => import('@/views/Clients.vue'),

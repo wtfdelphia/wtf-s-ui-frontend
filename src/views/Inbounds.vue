@@ -21,17 +21,55 @@
     :tag="sessions.tag"
     @close="closeSessions"
   />
+  <QuickTemplate
+    v-model="templateModal"
+    :visible="templateModal"
+    @close="closeTemplate"
+  />
+  <ExportLinks
+    v-model="exportModal"
+    :visible="exportModal"
+    @close="exportModal = false"
+  />
+  <QrCode
+    v-model="qrcode.visible"
+    :visible="qrcode.visible"
+    :id="qrcode.id"
+    @close="qrcode.visible = false"
+  />
+  <v-dialog v-model="clearConfirm" width="380">
+    <v-card class="rounded-lg" :title="$t('quickTemplate.clearAll')">
+      <v-divider></v-divider>
+      <v-card-text>{{ $t('quickTemplate.clearAllConfirm') }}</v-card-text>
+      <v-card-actions>
+        <v-spacer></v-spacer>
+        <v-btn color="success" variant="outlined" @click="clearConfirm = false">{{ $t('no') }}</v-btn>
+        <v-btn color="error" variant="tonal" :loading="clearLoading" @click="delAllInbounds">{{ $t('yes') }}</v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
+  <v-dialog v-model="picker.visible" width="320">
+    <v-card class="rounded-lg" :title="$t('pages.clients')">
+      <v-divider></v-divider>
+      <v-list density="compact" nav>
+        <v-list-item v-for="c in picker.clients" :key="c.id" link @click="pickClient(c.id)">
+          <template v-slot:prepend><v-icon icon="mdi-qrcode"></v-icon></template>
+          <v-list-item-title>{{ c.name }}</v-list-item-title>
+        </v-list-item>
+      </v-list>
+    </v-card>
+  </v-dialog>
   <v-row>
-    <v-col
-      cols="12"
-      justify="center"
-      align="center"
-    >
-      <v-btn
-        color="primary"
-        @click="showModal(0)"
-      >
-        {{ $t('actions.add') }}
+    <v-col cols="12" justify="center" align="center">
+      <v-btn color="primary" @click="showModal(0)">{{ $t('actions.add') }}</v-btn>
+      <v-btn color="primary" variant="tonal" class="ms-2" prepend-icon="mdi-flash" @click="templateModal = true">
+        {{ $t('quickTemplate.btn') }}
+      </v-btn>
+      <v-btn color="primary" variant="tonal" class="ms-2" prepend-icon="mdi-export-variant" @click="exportModal = true">
+        {{ $t('exportLinks.btn') }}
+      </v-btn>
+      <v-btn v-if="inbounds.length > 0" color="error" variant="tonal" class="ms-2" prepend-icon="mdi-delete-sweep" :loading="clearLoading" @click="clearConfirm = true">
+        {{ $t('quickTemplate.clearAll') }}
       </v-btn>
     </v-col>
   </v-row>
@@ -189,11 +227,11 @@
               :text="$t('actions.clone')"
             />
           </v-btn>
-          <v-btn
-            v-if="Data().enableTraffic"
-            icon="mdi-chart-line"
-            @click="showStats(item.tag)"
-          >
+          <v-btn icon="mdi-qrcode" v-if="item.users && item.users.length > 0" @click="showInboundQr(item)">
+            <v-icon />
+            <v-tooltip activator="parent" location="top" :text="$t('client.links')"></v-tooltip>
+          </v-btn>
+          <v-btn icon="mdi-chart-line" @click="showStats(item.tag)" v-if="Data().enableTraffic">
             <v-icon />
             <v-tooltip
               activator="parent"
@@ -210,6 +248,9 @@
 <script lang="ts" setup>
 import Data from '@/store/modules/data'
 import InboundVue from '@/layouts/modals/Inbound.vue'
+import QuickTemplate from '@/layouts/modals/QuickTemplate.vue'
+import QrCode from '@/layouts/modals/QrCode.vue'
+import ExportLinks from '@/layouts/modals/ExportLinks.vue'
 import Stats from '@/layouts/modals/Stats.vue'
 import Sessions from '@/layouts/modals/Sessions.vue'
 import { computed, ref } from 'vue'
@@ -237,6 +278,56 @@ const modal = ref({
   visible: false,
   id: 0,
 })
+
+const templateModal = ref(false)
+const closeTemplate = () => {
+  templateModal.value = false
+}
+
+const exportModal = ref(false)
+
+const clearConfirm = ref(false)
+const clearLoading = ref(false)
+const delAllInbounds = async () => {
+  clearLoading.value = true
+  const tags = inbounds.value.map(i => i.tag)
+  for (const tag of tags) {
+    await Data().save("inbounds", "del", tag)
+  }
+  clearLoading.value = false
+  clearConfirm.value = false
+}
+
+const qrcode = ref({
+  visible: false,
+  id: 0,
+})
+
+// QR access straight from an inbound card. One client -> show its QR directly;
+// several -> let the user pick which one.
+const picker = ref({
+  visible: false,
+  clients: <any[]>[],
+})
+const clientsOf = (item: any): any[] => {
+  return Data().clients.filter((c: any) => Array.isArray(c.inbounds) && c.inbounds.includes(item.id))
+}
+const showInboundQr = (item: any) => {
+  const cls = clientsOf(item)
+  if (cls.length === 0) return
+  if (cls.length === 1) {
+    qrcode.value.id = cls[0].id
+    qrcode.value.visible = true
+    return
+  }
+  picker.value.clients = cls
+  picker.value.visible = true
+}
+const pickClient = (id: number) => {
+  picker.value.visible = false
+  qrcode.value.id = id
+  qrcode.value.visible = true
+}
 
 let delOverlay = ref(new Array<boolean>)
 

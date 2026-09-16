@@ -40,11 +40,7 @@
       </v-list-item>
     </v-list>
     <template #append>
-      <v-list-item
-        prepend-icon="mdi-logout"
-        :title="$t('menu.logout')"
-        @click="Logout"
-      />
+      <v-list-item prepend-icon="mdi-logout" :title="$t('menu.logout')" @click="Logout"></v-list-item>
     </template>
   </v-navigation-drawer>
 </template>
@@ -64,6 +60,8 @@ const showDrawer = computed((): boolean => {
 const menu = [
   { title: 'pages.home', icon: 'mdi-home',  path: '/' },
   { title: 'pages.inbounds', icon: 'mdi-cloud-download',  path: '/inbounds' },
+  { title: 'pages.relay', icon: 'mdi-transit-connection-variant',  path: '/relay' },
+  { title: 'pages.servers', icon: 'mdi-server-network',  path: '/servers' },
   { title: 'pages.clients', icon: 'mdi-account-multiple',  path: '/clients' },
   { title: 'pages.outbounds', icon: 'mdi-cloud-upload',  path: '/outbounds' },
   { title: 'pages.endpoints', icon: 'mdi-cloud-tags',  path: '/endpoints' },
